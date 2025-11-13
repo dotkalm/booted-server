@@ -1,0 +1,7 @@
+path: models/RB600
+train: RB600_train/obj_train_data
+val: RB600_val/obj_train_data
+test: RB600_test/obj_train_data
+
+nc: 2
+names: ['Bolt', 'Rim']

@@ -4,10 +4,22 @@ __pycache__/
 build/
 dist/
 wheels/
-wheels_dataset/
 *.egg-info
 
 # Virtual environments
 .venv
 
+# machine learning files
+*.pt
+*.pth
+*.onnx
+models/
+results/
+runs/
+
+
+# Training artifacts
+wandb/
+__pycache__/
+*.pyc
 
