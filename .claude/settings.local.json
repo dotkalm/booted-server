@@ -7,7 +7,10 @@
       "Bash(.venv/bin/python -m pytest --version)",
       "Bash(uv add:*)",
       "Bash(.venv/bin/python -m pytest tests/test_detector.py -v --tb=short)",
-      "Bash(.venv/bin/python -m pytest tests/test_detector.py -v -s)"
+      "Bash(.venv/bin/python -m pytest tests/test_detector.py -v -s)",
+      "Bash(timeout:*)",
+      "Bash(.venv/bin/python:*)",
+      "Bash(chmod:*)"
     ],
     "deny": [],
     "ask": []
