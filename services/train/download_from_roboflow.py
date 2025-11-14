@@ -33,21 +33,21 @@ def download_dataset_from_roboflow():
 
     # Validate API key
     if not api_key:
-        print("❌ Error: No Roboflow API key found")
+        print("ERROR: No Roboflow API key found")
         print("   Set ROBOFLOW_PRIVATE_API_KEY or ROBOFLOW_PUBLIC_API_KEY")
         print("   Get your API key from: https://app.roboflow.com/settings/api")
         sys.exit(1)
 
-    print(f"🔑 Using API key: {api_key[:10]}...")
-    print(f"📦 Project: {project_name}")
-    print(f"🔢 Version: {version}")
+    print(f"Using API key: {api_key[:10]}...")
+    print(f"Project: {project_name}")
+    print(f"Version: {version}")
 
     # Initialize Roboflow
     try:
         rf = Roboflow(api_key=api_key)
-        print("✓ Connected to Roboflow")
+        print("Connected to Roboflow")
     except Exception as e:
-        print(f"❌ Failed to connect to Roboflow: {e}")
+        print(f"ERROR: Failed to connect to Roboflow: {e}")
         sys.exit(1)
 
     # Get workspace and project
@@ -57,25 +57,25 @@ def download_dataset_from_roboflow():
         else:
             workspace = rf.workspace()
 
-        print(f"✓ Workspace: {workspace.name}")
+        print(f"Workspace: {workspace.name}")
 
         project = workspace.project(project_name)
-        print(f"✓ Project: {project.name}")
+        print(f"Project: {project.name}")
 
     except Exception as e:
-        print(f"❌ Failed to access project: {e}")
+        print(f"ERROR: Failed to access project: {e}")
         print(f"\nTroubleshooting:")
         print(f"  1. Make sure you created a project named '{project_name}'")
         print(f"  2. Or set ROBOFLOW_PROJECT env var to your project name")
-        print(f"  3. Check project settings → API to see correct project ID")
+        print(f"  3. Check project settings -> API to see correct project ID")
         sys.exit(1)
 
     # Get dataset version
     try:
         dataset_version = project.version(version)
-        print(f"✓ Dataset version {version} found")
+        print(f"Dataset version {version} found")
     except Exception as e:
-        print(f"❌ Failed to access version {version}: {e}")
+        print(f"ERROR: Failed to access version {version}: {e}")
         print(f"\nMake sure you:")
         print(f"  1. Finished labeling images")
         print(f"  2. Generated a dataset version")
@@ -86,7 +86,7 @@ def download_dataset_from_roboflow():
     models_dir = project_root / "models"
     models_dir.mkdir(exist_ok=True)
 
-    print(f"\n🚀 Downloading dataset to {models_dir}/")
+    print(f"\nDownloading dataset to {models_dir}/")
     print(f"   Format: YOLOv8")
 
     try:
@@ -95,18 +95,18 @@ def download_dataset_from_roboflow():
             location=str(models_dir)
         )
 
-        print(f"\n✅ Download complete!")
-        print(f"📁 Dataset saved to: {models_dir}/{project_name}-{version}/")
+        print(f"\nDownload complete!")
+        print(f"Dataset saved to: {models_dir}/{project_name}-{version}/")
 
         # Show dataset info
         data_yaml = models_dir / f"{project_name}-{version}" / "data.yaml"
         if data_yaml.exists():
-            print(f"\n📋 Dataset configuration: {data_yaml}")
-            print(f"\n📄 Contents:")
+            print(f"\nDataset configuration: {data_yaml}")
+            print(f"\nContents:")
             with open(data_yaml, 'r') as f:
                 print(f.read())
 
-        print(f"\n🎯 Next steps:")
+        print(f"\nNext steps:")
         print(f"   1. Review the dataset in {models_dir}/{project_name}-{version}/")
         print(f"   2. Update train_street_wheels.py if needed:")
         print(f"      dataset_yaml = project_root / 'models/{project_name}-{version}/data.yaml'")
@@ -116,7 +116,7 @@ def download_dataset_from_roboflow():
         return dataset
 
     except Exception as e:
-        print(f"\n❌ Download failed: {e}")
+        print(f"\nERROR: Download failed: {e}")
         print(f"\nTroubleshooting:")
         print(f"  1. Check your internet connection")
         print(f"  2. Verify API key permissions")
@@ -133,8 +133,8 @@ if __name__ == "__main__":
         download_dataset_from_roboflow()
         sys.exit(0)
     except KeyboardInterrupt:
-        print("\n\n⚠️  Download cancelled by user")
+        print("\n\nWARNING: Download cancelled by user")
         sys.exit(1)
     except Exception as e:
-        print(f"\n❌ Unexpected error: {e}")
+        print(f"\nERROR: Unexpected error: {e}")
         sys.exit(1)

@@ -18,8 +18,8 @@ def train_street_wheel_detector():
     dataset_yaml = project_root / "models/street-car-wheels-1/data.yaml"
 
     if not dataset_yaml.exists():
-        print(f"❌ Dataset not found at {dataset_yaml}")
-        print("📥 Download from Roboflow first:")
+        print(f"ERROR: Dataset not found at {dataset_yaml}")
+        print("Download from Roboflow first:")
         print("   1. Go to your Roboflow project")
         print("   2. Generate version with augmentations")
         print("   3. Export as YOLOv8 format")
@@ -30,8 +30,8 @@ def train_street_wheel_detector():
     yolov8_path = project_root / 'yolov8n.pt'
     model = YOLO(str(yolov8_path))
 
-    print("🚀 Starting training on street-level wheel dataset...")
-    print(f"📁 Dataset: {dataset_yaml}")
+    print("Starting training on street-level wheel dataset...")
+    print(f"Dataset: {dataset_yaml}")
 
     # Train with street-specific augmentations
     results_dir = project_root / 'results'
@@ -82,15 +82,15 @@ def train_street_wheel_detector():
     )
 
     output_path = results_dir / 'street_wheel_detection_v1'
-    print("\n✅ Training complete!")
-    print(f"📊 Results saved to: {output_path}/")
-    print(f"🎯 Best weights: {output_path}/weights/best.pt")
+    print("\nTraining complete!")
+    print(f"Results saved to: {output_path}/")
+    print(f"Best weights: {output_path}/weights/best.pt")
 
     # Run validation
-    print("\n🧪 Running validation...")
+    print("\nRunning validation...")
     metrics = model.val()
 
-    print(f"\n📈 Final Metrics:")
+    print(f"\nFinal Metrics:")
     print(f"   mAP@50: {metrics.box.map50:.3f}")
     print(f"   mAP@50-95: {metrics.box.map:.3f}")
     print(f"   Precision: {metrics.box.mp:.3f}")

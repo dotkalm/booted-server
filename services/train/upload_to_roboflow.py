@@ -25,7 +25,7 @@ def upload_images_to_roboflow():
 
     # Validate environment variables
     if not image_path:
-        print("❌ Error: ROBOFLOW_IMAGE_PATH environment variable not set")
+        print("ERROR: ROBOFLOW_IMAGE_PATH environment variable not set")
         print("   Usage: export ROBOFLOW_IMAGE_PATH='/path/to/images'")
         sys.exit(1)
 
@@ -33,7 +33,7 @@ def upload_images_to_roboflow():
     api_key = private_api_key or public_api_key
 
     if not api_key:
-        print("❌ Error: No Roboflow API key found")
+        print("ERROR: No Roboflow API key found")
         print("   Set ROBOFLOW_PRIVATE_API_KEY or ROBOFLOW_PUBLIC_API_KEY")
         print("   Get your API key from: https://app.roboflow.com/settings/api")
         sys.exit(1)
@@ -41,11 +41,11 @@ def upload_images_to_roboflow():
     # Validate image path exists
     image_dir = Path(image_path)
     if not image_dir.exists():
-        print(f"❌ Error: Image path does not exist: {image_path}")
+        print(f"ERROR: Image path does not exist: {image_path}")
         sys.exit(1)
 
     if not image_dir.is_dir():
-        print(f"❌ Error: Path is not a directory: {image_path}")
+        print(f"ERROR: Path is not a directory: {image_path}")
         sys.exit(1)
 
     # Find all image files
@@ -56,19 +56,19 @@ def upload_images_to_roboflow():
     ]
 
     if not image_files:
-        print(f"❌ Error: No image files found in {image_path}")
+        print(f"ERROR: No image files found in {image_path}")
         print(f"   Looking for extensions: {', '.join(image_extensions)}")
         sys.exit(1)
 
-    print(f"📁 Found {len(image_files)} images in {image_path}")
-    print(f"🔑 Using API key: {api_key[:10]}...")
+    print(f"Found {len(image_files)} images in {image_path}")
+    print(f"Using API key: {api_key[:10]}...")
 
     # Initialize Roboflow
     try:
         rf = Roboflow(api_key=api_key)
-        print("✓ Connected to Roboflow")
+        print("Connected to Roboflow")
     except Exception as e:
-        print(f"❌ Failed to connect to Roboflow: {e}")
+        print(f"ERROR: Failed to connect to Roboflow: {e}")
         sys.exit(1)
 
     # Get workspace and project
@@ -82,23 +82,23 @@ def upload_images_to_roboflow():
         else:
             workspace = rf.workspace()
 
-        print(f"✓ Workspace: {workspace.name}")
+        print(f"Workspace: {workspace.name}")
 
         project = workspace.project(project_name)
-        print(f"✓ Project: {project.name}")
+        print(f"Project: {project.name}")
 
     except Exception as e:
-        print(f"❌ Failed to access project: {e}")
+        print(f"ERROR: Failed to access project: {e}")
         print(f"\nTroubleshooting:")
         print(f"  1. Make sure you created a project named '{project_name}'")
         print(f"  2. Or set ROBOFLOW_PROJECT env var to your project name")
-        print(f"  3. Check project settings → API to see correct project ID")
+        print(f"  3. Check project settings -> API to see correct project ID")
         sys.exit(1)
 
     # Create batch name with timestamp
     batch_name = f"batch_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
 
-    print(f"\n🚀 Starting upload...")
+    print(f"\nStarting upload...")
     print(f"   Batch: {batch_name}")
     print(f"   Images: {len(image_files)}")
 
@@ -119,18 +119,18 @@ def upload_images_to_roboflow():
             uploaded_count += 1
 
         except Exception as e:
-            print(f"\n   ⚠️  Failed to upload {image_file.name}: {e}")
+            print(f"\n   WARNING: Failed to upload {image_file.name}: {e}")
             failed_count += 1
             continue
 
     # Summary
-    print(f"\n\n✅ Upload complete!")
+    print(f"\n\nUpload complete!")
     print(f"   Successfully uploaded: {uploaded_count}/{len(image_files)}")
 
     if failed_count > 0:
         print(f"   Failed: {failed_count}")
 
-    print(f"\n📋 Next steps:")
+    print(f"\nNext steps:")
     print(f"   1. Go to https://app.roboflow.com")
     print(f"   2. Open your '{project_name}' project")
     print(f"   3. Click 'Annotate' to start labeling")
@@ -148,8 +148,8 @@ if __name__ == "__main__":
         count = upload_images_to_roboflow()
         sys.exit(0)
     except KeyboardInterrupt:
-        print("\n\n⚠️  Upload cancelled by user")
+        print("\n\nWARNING: Upload cancelled by user")
         sys.exit(1)
     except Exception as e:
-        print(f"\n❌ Unexpected error: {e}")
+        print(f"\nERROR: Unexpected error: {e}")
         sys.exit(1)
