@@ -29,18 +29,19 @@ def test_roboflow_setup():
     print("-" * 60)
 
     required_vars = {
-        'ROBOFLOW_PUBLIC_API_KEY': 'Required for all operations',
+        'ROBOFLOW_PRIVATE_API_KEY': 'Required for API operations (or use public key)',
         'ROBOFLOW_PROJECT': 'Your project ID',
         'ROBOFLOW_WORKSPACE': 'Your workspace name',
     }
 
     optional_vars = {
-        'ROBOFLOW_PRIVATE_API_KEY': 'Optional (falls back to public key)',
+        'ROBOFLOW_PUBLIC_API_KEY': 'Fallback if private key not set',
         'ROBOFLOW_IMAGE_PATH': 'Required for upload only',
         'ROBOFLOW_VERSION': 'Optional (defaults to 1)',
     }
 
     all_good = True
+    has_api_key = False
 
     for var, description in required_vars.items():
         value = os.getenv(var)
@@ -48,14 +49,20 @@ def test_roboflow_setup():
             # Mask API keys
             if 'KEY' in var:
                 display = f"{value[:10]}...{value[-4:]}" if len(value) > 14 else "***"
+                has_api_key = True
             else:
                 display = value
             print(f"  ✓ {var}: {display}")
             print(f"    └─ {description}")
         else:
-            print(f"  ✗ {var}: NOT SET")
-            print(f"    └─ {description}")
-            all_good = False
+            # API key is special - we need either private or public
+            if 'KEY' in var:
+                print(f"  - {var}: not set")
+                print(f"    └─ {description}")
+            else:
+                print(f"  ✗ {var}: NOT SET")
+                print(f"    └─ {description}")
+                all_good = False
 
     print()
     for var, description in optional_vars.items():
@@ -63,6 +70,7 @@ def test_roboflow_setup():
         if value:
             if 'KEY' in var:
                 display = f"{value[:10]}...{value[-4:]}" if len(value) > 14 else "***"
+                has_api_key = True
             elif 'PATH' in var:
                 display = value
                 # Check if path exists
@@ -80,6 +88,10 @@ def test_roboflow_setup():
 
     print("\n" + "=" * 60)
 
+    if not has_api_key:
+        print("❌ No API key found (need ROBOFLOW_PRIVATE_API_KEY or ROBOFLOW_PUBLIC_API_KEY)")
+        return False
+
     if not all_good:
         print("❌ Missing required environment variables")
         return False
@@ -95,7 +107,12 @@ def test_roboflow_setup():
         return False
 
     try:
-        api_key = os.getenv('ROBOFLOW_PUBLIC_API_KEY')
+        # Try private key first (usually needed for API operations)
+        api_key = os.getenv('ROBOFLOW_PRIVATE_API_KEY') or os.getenv('ROBOFLOW_PUBLIC_API_KEY')
+        if not api_key:
+            print("❌ No API key found")
+            return False
+
         rf = Roboflow(api_key=api_key)
         print("✓ Connected to Roboflow API")
 

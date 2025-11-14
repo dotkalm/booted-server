@@ -17,8 +17,9 @@ Upload street-level car images to Roboflow for labeling.
 **Usage:**
 ```bash
 export ROBOFLOW_IMAGE_PATH="/path/to/street/car/images"
-export ROBOFLOW_PUBLIC_API_KEY="your_api_key"
-export ROBOFLOW_PROJECT="street-car-wheels"  # Optional
+export ROBOFLOW_PRIVATE_API_KEY="your_api_key"
+export ROBOFLOW_WORKSPACE="joelml"
+export ROBOFLOW_PROJECT="street-car-wheels"
 
 python services/train/upload_to_roboflow.py
 ```
@@ -50,9 +51,10 @@ Download the labeled and augmented dataset.
 
 **Usage:**
 ```bash
-export ROBOFLOW_PUBLIC_API_KEY="your_api_key"
-export ROBOFLOW_PROJECT="street-car-wheels"  # Optional
-export ROBOFLOW_VERSION="1"  # Optional
+export ROBOFLOW_PRIVATE_API_KEY="your_api_key"
+export ROBOFLOW_WORKSPACE="joelml"
+export ROBOFLOW_PROJECT="street-car-wheels"
+export ROBOFLOW_VERSION="1"  # Optional, defaults to 1
 
 python services/train/download_from_roboflow.py
 ```
@@ -89,10 +91,11 @@ python services/train/train_street_wheels.py
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `ROBOFLOW_PUBLIC_API_KEY` | ✓ | - | Your Roboflow API key |
+| `ROBOFLOW_PRIVATE_API_KEY` | ✓ | - | Your Roboflow private API key (preferred) |
+| `ROBOFLOW_PUBLIC_API_KEY` | - | - | Fallback if private key not set |
 | `ROBOFLOW_IMAGE_PATH` | ✓ (upload) | - | Path to images for upload |
-| `ROBOFLOW_PROJECT` | - | `street-car-wheels` | Project name |
-| `ROBOFLOW_WORKSPACE` | - | Auto-detected | Workspace name |
+| `ROBOFLOW_PROJECT` | ✓ | `street-car-wheels` | Project ID from URL |
+| `ROBOFLOW_WORKSPACE` | ✓ | - | Workspace name from URL |
 | `ROBOFLOW_VERSION` | - | `1` | Dataset version to download |
 
 ## Full Workflow Example
@@ -100,7 +103,8 @@ python services/train/train_street_wheels.py
 ```bash
 # Step 1: Upload images
 export ROBOFLOW_IMAGE_PATH="./street_images"
-export ROBOFLOW_PUBLIC_API_KEY="abc123..."
+export ROBOFLOW_PRIVATE_API_KEY="abc123..."  # Use private key for API operations
+export ROBOFLOW_WORKSPACE="joelml"
 export ROBOFLOW_PROJECT="street-car-wheels"
 
 python services/train/upload_to_roboflow.py

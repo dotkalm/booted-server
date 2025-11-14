@@ -21,14 +21,20 @@ def download_dataset_from_roboflow():
     project_root = Path(__file__).parent.parent.parent
 
     # Get environment variables
-    api_key = os.getenv("ROBOFLOW_PUBLIC_API_KEY")
+    private_api_key = os.getenv("ROBOFLOW_PRIVATE_API_KEY")
+    public_api_key = os.getenv("ROBOFLOW_PUBLIC_API_KEY")
+
+    # Try private key first (usually needed for API operations)
+    api_key = private_api_key or public_api_key
+
     workspace_name = os.getenv("ROBOFLOW_WORKSPACE", None)
     project_name = os.getenv("ROBOFLOW_PROJECT", "street-car-wheels")
     version = int(os.getenv("ROBOFLOW_VERSION", "1"))
 
     # Validate API key
     if not api_key:
-        print("❌ Error: ROBOFLOW_PUBLIC_API_KEY environment variable not set")
+        print("❌ Error: No Roboflow API key found")
+        print("   Set ROBOFLOW_PRIVATE_API_KEY or ROBOFLOW_PUBLIC_API_KEY")
         print("   Get your API key from: https://app.roboflow.com/settings/api")
         sys.exit(1)
 

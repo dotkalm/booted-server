@@ -20,8 +20,8 @@ def upload_images_to_roboflow():
 
     # Get environment variables
     image_path = os.getenv("ROBOFLOW_IMAGE_PATH")
-    public_api_key = os.getenv("ROBOFLOW_PUBLIC_API_KEY")
     private_api_key = os.getenv("ROBOFLOW_PRIVATE_API_KEY")
+    public_api_key = os.getenv("ROBOFLOW_PUBLIC_API_KEY")
 
     # Validate environment variables
     if not image_path:
@@ -29,13 +29,14 @@ def upload_images_to_roboflow():
         print("   Usage: export ROBOFLOW_IMAGE_PATH='/path/to/images'")
         sys.exit(1)
 
-    if not public_api_key:
-        print("❌ Error: ROBOFLOW_PUBLIC_API_KEY environment variable not set")
+    # Try private key first (usually needed for API operations)
+    api_key = private_api_key or public_api_key
+
+    if not api_key:
+        print("❌ Error: No Roboflow API key found")
+        print("   Set ROBOFLOW_PRIVATE_API_KEY or ROBOFLOW_PUBLIC_API_KEY")
         print("   Get your API key from: https://app.roboflow.com/settings/api")
         sys.exit(1)
-
-    # Roboflow typically uses just one API key - try public first
-    api_key = public_api_key or private_api_key
 
     # Validate image path exists
     image_dir = Path(image_path)
