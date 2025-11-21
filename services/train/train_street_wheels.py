@@ -15,7 +15,7 @@ def train_street_wheel_detector():
 
     # Path to Roboflow exported dataset
     # Update this path after downloading from Roboflow
-    dataset_yaml = project_root / "models/street-car-wheels-1/data.yaml"
+    dataset_yaml = project_root / "models/street-car-wheels-3/data.yaml"
 
     if not dataset_yaml.exists():
         print(f"ERROR: Dataset not found at {dataset_yaml}")
@@ -76,7 +76,7 @@ def train_street_wheel_detector():
         exist_ok=False,
 
         # Performance
-        device=0,  # GPU 0, or 'cpu' for CPU training
+        device='mps',  # MPS for Mac GPU, 'cpu' for CPU training, or 0 for CUDA
         workers=8,
         verbose=True
     )

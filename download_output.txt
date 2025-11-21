@@ -1,0 +1,28 @@
+/Users/joelholmberg/webapps/edge_detector/booted_server/.venv/lib/python3.9/site-packages/urllib3/__init__.py:35: NotOpenSSLWarning: urllib3 v2 only supports OpenSSL 1.1.1+, currently the 'ssl' module is compiled with 'LibreSSL 2.8.3'. See: https://github.com/urllib3/urllib3/issues/3020
+  warnings.warn(
+============================================================
+Roboflow Dataset Download Script
+============================================================
+
+Using API key: knZK53wSXW...
+Project: street-car-wheels-x6bzj
+Version: 2
+Connected to Roboflow
+loading Roboflow workspace...
+Workspace: joelML
+loading Roboflow project...
+Project: Street car wheels
+Dataset version 2 found
+
+Downloading dataset to /Users/joelholmberg/webapps/edge_detector/booted_server/models/
+   Format: YOLOv8
+
+Download complete!
+Dataset saved to: /Users/joelholmberg/webapps/edge_detector/booted_server/models/street-car-wheels-x6bzj-2/
+
+Next steps:
+   1. Review the dataset in /Users/joelholmberg/webapps/edge_detector/booted_server/models/street-car-wheels-x6bzj-2/
+   2. Update train_street_wheels.py if needed:
+      dataset_yaml = project_root / 'models/street-car-wheels-x6bzj-2/data.yaml'
+   3. Run training:
+      python services/train/train_street_wheels.py
