@@ -57,5 +57,4 @@ jobs:
             --memory ${{ env.MEMORY }} \
             --cpu ${{ env.CPU }} \
             --max-instances ${{ env.MAX_INSTANCES }} \
-            --timeout ${{ env.TIMEOUT }} \
-            --set-env-vars "ROBOFLOW_API_KEY=${{ secrets.ROBOFLOW_API_KEY }}"
+            --timeout ${{ env.TIMEOUT }}

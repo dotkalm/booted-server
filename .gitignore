@@ -18,6 +18,31 @@ models/
 results/
 runs/
 
+# machine learning files
+*.pt
+*.pth
+*.onnx
+models/
+results/
+runs/
+
+# Exception: Allow specific production model files
+!yolov8n.pt
+!results/rb600_wheel_detection3/
+!results/street_wheel_detection_v1/
+
+# In those directories, ignore everything except
+weights/
+results/rb600_wheel_detection3/*
+results/street_wheel_detection_v1/*
+!results/rb600_wheel_detection3/weights/
+!results/street_wheel_detection_v1/weights/
+
+# In weights/, ignore everything except best.pt
+results/rb600_wheel_detection3/weights/*
+results/street_wheel_detection_v1/weights/*
+!results/rb600_wheel_detection3/weights/best.pt
+!results/street_wheel_detection_v1/weights/best.pt
 
 # Training artifacts
 wandb/
