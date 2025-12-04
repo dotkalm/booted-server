@@ -29,6 +29,13 @@ runs/
 download_output.txt
 *.md
 
+# Training artifacts - ignore everything in results except specific models
+results/*/weights/last.pt
+results/*/weights/epoch*.pt
+results/rb600_wheel_detection/
+results/rb600_wheel_detection2/
+wandb/
+
 # Environment variables
 .env
 
