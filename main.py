@@ -1,5 +1,6 @@
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from PIL import Image
+import json
 import io
 import logging
 from services.models.detector import TireDetector, CarWheelDetector
@@ -103,10 +104,6 @@ async def detect_cars_and_wheels(
             car_conf=car_confidence,
             wheel_conf=wheel_confidence
         )
-
-        output_path = "output_image_no_ext"
-        image.save(output_path, format="JPEG")
-        logger.info(f"Saved image to: {output_path}")
 
         return {
             "filename": file.filename,
