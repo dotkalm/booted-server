@@ -104,6 +104,10 @@ async def detect_cars_and_wheels(
             wheel_conf=wheel_confidence
         )
 
+        output_path = "output_image_no_ext"
+        image.save(output_path, format="JPEG")
+        logger.info(f"Saved image to: {output_path}")
+
         return {
             "filename": file.filename,
             "width": image.width,
