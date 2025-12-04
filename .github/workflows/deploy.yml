@@ -57,4 +57,5 @@ jobs:
             --memory ${{ env.MEMORY }} \
             --cpu ${{ env.CPU }} \
             --max-instances ${{ env.MAX_INSTANCES }} \
-            --timeout ${{ env.TIMEOUT }}
+            --timeout ${{ env.TIMEOUT }} \
+            --no-cpu-throttling

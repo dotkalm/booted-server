@@ -5,27 +5,59 @@ import logging
 from services.models.detector import TireDetector, CarWheelDetector
 
 # Configure logging
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 logger = logging.getLogger(__name__)
+
+logger.info("=" * 50)
+logger.info("Starting Booted API application")
+logger.info("=" * 50)
 
 app = FastAPI()
 
 # Global detector instances
 detector = None
 car_wheel_detector = None
+models_loaded = False
 
 @app.on_event("startup")
 async def load_models():
     """Load models after server starts listening"""
-    global detector, car_wheel_detector
-    logger.info("Loading detection models...")
-    detector = TireDetector()
-    car_wheel_detector = CarWheelDetector()
-    logger.info("Models loaded successfully")
+    global detector, car_wheel_detector, models_loaded
+    try:
+        logger.info("Server started successfully, beginning model load...")
+        logger.info("Loading TireDetector model...")
+        detector = TireDetector()
+        logger.info("TireDetector loaded successfully")
+
+        logger.info("Loading CarWheelDetector models...")
+        car_wheel_detector = CarWheelDetector()
+        logger.info("CarWheelDetector loaded successfully")
+
+        models_loaded = True
+        logger.info("✓ All models loaded and ready for inference")
+    except Exception as e:
+        logger.error(f"FATAL: Failed to load models: {e}", exc_info=True)
+        models_loaded = False
 
 @app.get("/")
 def read_root():
-    return {"status": "working"}
+    return {
+        "status": "working",
+        "models_loaded": models_loaded
+    }
+
+@app.get("/health")
+def health_check():
+    """Detailed health check endpoint"""
+    return {
+        "status": "healthy" if models_loaded else "starting",
+        "tire_detector": detector is not None,
+        "car_wheel_detector": car_wheel_detector is not None,
+        "models_ready": models_loaded
+    }
 
 @app.post("/detect")
 async def detect_objects(file: UploadFile = File(...)):

@@ -19,5 +19,8 @@ COPY . .
 # Expose port (Cloud Run uses PORT environment variable)
 ENV PORT=8080
 
+# Set Python to unbuffered mode for immediate log output
+ENV PYTHONUNBUFFERED=1
+
 # Run the application
-CMD uv run uvicorn main:app --host 0.0.0.0 --port $PORT
+CMD [".venv/bin/uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080", "--log-level", "info"]
