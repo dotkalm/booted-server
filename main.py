@@ -10,9 +10,18 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI()
 
-# Initialize detectors once at startup
-detector = TireDetector()
-car_wheel_detector = CarWheelDetector()
+# Global detector instances
+detector = None
+car_wheel_detector = None
+
+@app.on_event("startup")
+async def load_models():
+    """Load models after server starts listening"""
+    global detector, car_wheel_detector
+    logger.info("Loading detection models...")
+    detector = TireDetector()
+    car_wheel_detector = CarWheelDetector()
+    logger.info("Models loaded successfully")
 
 @app.get("/")
 def read_root():
@@ -20,6 +29,9 @@ def read_root():
 
 @app.post("/detect")
 async def detect_objects(file: UploadFile = File(...)):
+    if detector is None:
+        raise HTTPException(status_code=503, detail="Models still loading, please try again")
+
     try:
         contents = await file.read()
         image = Image.open(io.BytesIO(contents))
@@ -46,6 +58,9 @@ async def detect_cars_and_wheels(
     car_confidence: float = 0.3,
     wheel_confidence: float = 0.3
 ):
+    if car_wheel_detector is None:
+        raise HTTPException(status_code=503, detail="Models still loading, please try again")
+
     try:
         contents = await file.read()
         image = Image.open(io.BytesIO(contents))
