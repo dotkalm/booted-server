@@ -201,9 +201,8 @@ def position_tire_boot(
     tire_boot.location = (blender_x, blender_y, 0)
     
     # Apply base rotation to orient the claw correctly
-    # The model needs to be rotated to face the camera properly
-    # Rotate 90 degrees clockwise around Z axis (negative rotation)
-    base_rotation = Euler((0, 0, math.radians(-90)), 'XYZ')
+    # Rotate around X axis to face the camera (tilt forward)
+    base_rotation = Euler((math.radians(-90), 0, 0), 'XYZ')
     tire_boot.rotation_euler = base_rotation
     
     # Apply additional rotation from our geometry calculations if provided
