@@ -1,5 +1,6 @@
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from PIL import Image
+from datetime import datetime
 import json
 import io
 import logging
@@ -98,12 +99,24 @@ async def detect_cars_and_wheels(
         contents = await file.read()
         image = Image.open(io.BytesIO(contents))
 
+        # export detection results to JSON and save image for fixures
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        image_output_path = f"image_fixture_{timestamp}.jpg"
+        image.save(image_output_path, format="JPEG")
+        logger.info(f"Saved image to: {image_output_path}")
+
+        json_filename = f"detection_fixture_{timestamp}.json"
+        print(f"JSON data successfully written to {json_filename}")
+
         # Run two-stage detection
         results = car_wheel_detector.detect_cars_and_wheels(
             image,
             car_conf=car_confidence,
             wheel_conf=wheel_confidence
         )
+
+        with open(json_filename, 'w') as json_file:
+            json.dump(results, json_file, indent=4)
 
         return {
             "filename": file.filename,
