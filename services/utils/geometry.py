@@ -71,10 +71,9 @@ def estimate_viewing_angle(bbox: Dict[str, int]) -> float:
 
 def identify_front_rear_wheels(wheels: List[Dict[str, Any]], car_bbox: Dict[str, int]) -> Dict[str, Optional[Dict[str, Any]]]:
     """
-    Identify which wheel is front and which is rear based on position.
+    Identify which wheel is front and which is rear based on x position.
     
-    Heuristic: Cars typically have a longer front overhang (hood) than rear overhang (trunk).
-    The wheel closer to the shorter overhang edge is the rear wheel.
+    Simple heuristic: leftmost wheel is front, rightmost is rear.
     
     Assumptions:
     - Side view of car
@@ -87,57 +86,17 @@ def identify_front_rear_wheels(wheels: List[Dict[str, Any]], car_bbox: Dict[str,
         return {"front": None, "rear": None}
     
     if len(wheels) == 1:
-        # Single wheel - determine if front or rear based on position relative to car center
-        wheel = wheels[0]
-        center_x, _ = calculate_wheel_center(wheel["bbox"])
-        car_center_x = (car_bbox["x1"] + car_bbox["x2"]) / 2
-        
-        # Measure distance to each edge of car bbox
-        dist_to_left = center_x - car_bbox["x1"]
-        dist_to_right = car_bbox["x2"] - center_x
-        
-        # The wheel closer to an edge is likely rear (shorter overhang)
-        # The wheel farther from an edge is likely front (longer hood overhang)
-        if dist_to_left < dist_to_right:
-            # Wheel is closer to left edge - likely rear wheel, car facing right
-            return {"front": None, "rear": wheel}
-        else:
-            # Wheel is closer to right edge - likely rear wheel, car facing left
-            return {"front": None, "rear": wheel}
+        # Single wheel - assign as rear (origin point)
+        return {"front": None, "rear": wheels[0]}
     
-    # Multiple wheels - sort by x position
+    # Multiple wheels - sort by x position (leftmost first)
     sorted_wheels = sorted(wheels, key=lambda w: calculate_wheel_center(w["bbox"])[0])
     
-    left_wheel = sorted_wheels[0]
-    right_wheel = sorted_wheels[-1]
-    
-    left_center_x, _ = calculate_wheel_center(left_wheel["bbox"])
-    right_center_x, _ = calculate_wheel_center(right_wheel["bbox"])
-    
-    # Calculate overhang distances
-    # Left overhang: distance from car's left edge to left wheel
-    # Right overhang: distance from right wheel to car's right edge
-    left_overhang = left_center_x - car_bbox["x1"]
-    right_overhang = car_bbox["x2"] - right_center_x
-    
-    # The side with SHORTER overhang is the REAR of the car
-    # (cars have short trunks, long hoods)
-    if left_overhang < right_overhang:
-        # Left overhang is shorter -> left side is rear -> car facing RIGHT
-        # Left wheel = rear, Right wheel = front
-        logger.debug(f"Car facing RIGHT: left_overhang={left_overhang:.0f} < right_overhang={right_overhang:.0f}")
-        return {
-            "front": right_wheel,
-            "rear": left_wheel
-        }
-    else:
-        # Right overhang is shorter -> right side is rear -> car facing LEFT
-        # Left wheel = front, Right wheel = rear
-        logger.debug(f"Car facing LEFT: left_overhang={left_overhang:.0f} >= right_overhang={right_overhang:.0f}")
-        return {
-            "front": left_wheel,
-            "rear": right_wheel
-        }
+    # Leftmost = front, rightmost = rear
+    return {
+        "front": sorted_wheels[0],
+        "rear": sorted_wheels[-1]
+    }
 
 
 def estimate_car_direction(wheels: List[Dict[str, Any]], car_bbox: Dict[str, int]) -> Tuple[float, float]:
@@ -323,7 +282,7 @@ def calculate_rotation_matrix(
     y_axis = y_axis / np.linalg.norm(y_axis)
     
     # ==========================================================================
-    # X-AXIS (Axle): Use ellipse data if available, otherwise perpendicular to Y and Z
+    # X-AXIS (Axle): Perpendicular to Y and Z
     # Points along the wheel axle, into the car
     # ==========================================================================
     
@@ -335,45 +294,14 @@ def calculate_rotation_matrix(
         ellipse_viewing_angle_deg = tire_ellipse.get("viewing_angle_deg", None)
         axis_ratio = tire_ellipse.get("axis_ratio", 1.0)
         
-        logger.info(f"Using ellipse data: angle={ellipse_angle_deg:.1f}°, "
+        logger.info(f"Ellipse data: angle={ellipse_angle_deg:.1f}°, "
                     f"ratio={axis_ratio:.2f}, view_angle={ellipse_viewing_angle_deg:.1f}°")
-        
-        # The ellipse major axis is perpendicular to the axle direction
-        # (when viewing the wheel from the side, the major axis is vertical or nearly so)
-        # The ellipse angle tells us how much the major axis deviates from vertical
-        # This deviation = tilt of the axle relative to horizontal
-        
-        # Convert ellipse angle to radians
-        # Ellipse angle is from horizontal, we need to find axle direction
-        # Major axis perpendicular = add 90°
-        axle_angle_rad = math.radians(ellipse_angle_deg + 90)
-        
-        # The axle direction in 2D image space
-        axle_2d_x = math.cos(axle_angle_rad)
-        axle_2d_y = math.sin(axle_angle_rad)
-        
-        # The viewing angle tells us how much the axle points into/out of screen
-        # A nearly circular ellipse (small viewing angle) means we're viewing head-on
-        # A more elliptical shape (larger viewing angle) means we're viewing from the side
-        viewing_rad = math.radians(ellipse_viewing_angle_deg)
-        
-        # Map 2D axle direction + viewing angle to 3D
-        # X-axis points along the axle: some component in screen plane, some into/out of screen
-        x_axis = np.array([
-            axle_2d_x * math.cos(viewing_rad),  # X component (modified by viewing angle)
-            axle_2d_y,                           # Y component (tilt from ellipse angle)
-            math.sin(viewing_rad)                # Z component (depth from viewing angle)
-        ])
-        
-        x_norm = np.linalg.norm(x_axis)
-        if x_norm > 0:
-            x_axis = x_axis / x_norm
-    else:
-        # Fallback: X = Y cross Z (right-hand rule)
-        x_axis = np.cross(y_axis, z_axis)
-        x_norm = np.linalg.norm(x_axis)
-        if x_norm > 0:
-            x_axis = x_axis / x_norm
+    
+    # X = Y cross Z (right-hand rule) - perpendicular to both
+    x_axis = np.cross(y_axis, z_axis)
+    x_norm = np.linalg.norm(x_axis)
+    if x_norm > 0:
+        x_axis = x_axis / x_norm
     
     # Flip X-axis based on which side we're viewing
     # If viewing left side: axle points into screen (negative Z in camera space)
