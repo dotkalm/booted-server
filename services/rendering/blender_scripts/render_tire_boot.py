@@ -26,9 +26,9 @@ def setup_render_settings(width: int, height: int, transparent: bool = True):
     """Configure render settings for compositing output."""
     scene = bpy.context.scene
     
-    # Output dimensions match input image
-    scene.render.resolution_x = width
-    scene.render.resolution_y = height
+    # Output dimensions match input image (temporarily 2x for higher quality)
+    scene.render.resolution_x = width * 2
+    scene.render.resolution_y = height * 2
     scene.render.resolution_percentage = 100
     
     # PNG with alpha for compositing
@@ -50,8 +50,9 @@ def setup_render_settings(width: int, height: int, transparent: bool = True):
             scene.render.engine = 'BLENDER_EEVEE'
     
     # Eevee settings - use try/except for API compatibility across versions
+    # Higher samples for better quality
     try:
-        scene.eevee.taa_render_samples = 64
+        scene.eevee.taa_render_samples = 128
     except AttributeError:
         pass
     
@@ -70,11 +71,12 @@ def setup_camera(wheel_center: tuple, wheel_radius: float, image_width: int, ima
     """
     Create and position an orthographic camera to match the 2D image perspective.
     
-    For compositing, we use an orthographic camera positioned to match
-    the input image's coordinate system.
+    For compositing, we use an orthographic camera positioned to look at the model
+    from the front (along the -Y axis), matching how the model appears in the preview.
     """
-    # Create camera
-    bpy.ops.object.camera_add(location=(0, 0, 10))
+    # Create camera - position it in front of the scene, looking toward +Y
+    # Camera is placed at negative Y, looking toward positive Y
+    bpy.ops.object.camera_add(location=(image_width / 2, -100, image_height / 2))
     camera = bpy.context.object
     camera.name = "CompositeCamera"
     
@@ -88,9 +90,9 @@ def setup_camera(wheel_center: tuple, wheel_radius: float, image_width: int, ima
     # We'll work in a coordinate system where 1 unit = 1 pixel
     camera.data.ortho_scale = max(image_width, image_height)
     
-    # Position camera looking down -Z axis
-    camera.location = (image_width / 2, image_height / 2, 100)
-    camera.rotation_euler = (0, 0, 0)
+    # Rotate camera to look along +Y axis (toward the scene)
+    # 90 degrees around X axis makes camera look from -Y toward +Y
+    camera.rotation_euler = (math.radians(90), 0, 0)
     
     return camera
 
@@ -191,18 +193,21 @@ def position_tire_boot(
     scale_factor = target_size / boot_size if boot_size > 0 else 1.0
     tire_boot.scale = (scale_factor, scale_factor, scale_factor)
     
-    # Convert image coordinates to Blender coordinates
-    # Image: origin top-left, Y down
-    # Blender: origin bottom-left, Y up (for 2D view)
+    # Convert image coordinates to Blender 3D coordinates
+    # Camera is looking along +Y axis, so:
+    # - Image X -> Blender X (horizontal)
+    # - Image Y -> Blender Z (vertical, but inverted: image Y=0 is top, Blender Z=high is top)
+    # - Blender Y is depth (0 for our flat compositing)
     blender_x = wheel_center[0]
-    blender_y = image_height - wheel_center[1]
+    blender_z = image_height - wheel_center[1]  # Flip Y to Z
+    blender_y = 0  # Depth = 0
     
     # Position at wheel center
-    tire_boot.location = (blender_x, blender_y, 0)
+    tire_boot.location = (blender_x, blender_y, blender_z)
     
     # Apply base rotation to orient the claw correctly
-    # Rotate around X axis to face the camera (tilt forward)
-    base_rotation = Euler((math.radians(-90), 0, 0), 'XYZ')
+    # No rotation needed - model is already oriented correctly at 0 degrees
+    base_rotation = Euler((0, 0, 0), 'XYZ')
     tire_boot.rotation_euler = base_rotation
     
     # Apply additional rotation from our geometry calculations if provided
@@ -251,6 +256,7 @@ def main():
     image_width = config['image_size']['width']
     image_height = config['image_size']['height']
     output_path = config['output_path']
+    hide_objects = config.get('hide_objects', [])  # Optional list of object names to hide
     
     print(f"Rendering tire boot:")
     print(f"  Blend file: {blend_file}")
@@ -258,6 +264,8 @@ def main():
     print(f"  Wheel radius: {wheel_radius}")
     print(f"  Image size: {image_width}x{image_height}")
     print(f"  Output: {output_path}")
+    if hide_objects:
+        print(f"  Hiding objects: {hide_objects}")
     
     # Clear and setup scene
     clear_scene()
@@ -268,6 +276,12 @@ def main():
     # Load and position tire boot
     tire_boot = load_tire_boot(blend_file)
     position_tire_boot(tire_boot, wheel_center, wheel_radius, rotation_matrix, image_height)
+    
+    # Hide specified objects (for testing which objects to remove)
+    for obj_name in hide_objects:
+        if obj_name in bpy.data.objects:
+            bpy.data.objects[obj_name].hide_render = True
+            print(f"  Hidden: {obj_name}")
     
     # Render
     render_to_file(output_path)

@@ -57,7 +57,8 @@ def render_tire_boot(
     image_size: Tuple[int, int],
     rotation_matrix: Optional[list] = None,
     blend_file: Optional[Path] = None,
-    output_path: Optional[Path] = None
+    output_path: Optional[Path] = None,
+    hide_objects: Optional[list] = None
 ) -> Path:
     """
     Render a tire boot at the specified wheel position.
@@ -69,6 +70,7 @@ def render_tire_boot(
         rotation_matrix: 3x3 rotation matrix for orientation (optional)
         blend_file: Path to .blend file (uses default if not specified)
         output_path: Path for rendered output (creates temp file if not specified)
+        hide_objects: List of object names to hide from render (optional)
     
     Returns:
         Path to the rendered PNG with transparency
@@ -99,7 +101,8 @@ def render_tire_boot(
             'width': image_size[0],
             'height': image_size[1]
         },
-        'output_path': str(output_path.absolute())
+        'output_path': str(output_path.absolute()),
+        'hide_objects': hide_objects or []
     }
     
     # Write config to temp file
