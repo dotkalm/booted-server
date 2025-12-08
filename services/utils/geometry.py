@@ -73,10 +73,12 @@ def identify_front_rear_wheels(wheels: List[Dict[str, Any]], car_bbox: Dict[str,
     """
     Identify which wheel is front and which is rear based on position.
     
+    Heuristic: Cars typically have a longer front overhang (hood) than rear overhang (trunk).
+    The wheel closer to the shorter overhang edge is the rear wheel.
+    
     Assumptions:
     - Side view of car
     - Maximum 2 visible wheels (front and rear on visible side)
-    - Rear wheel is typically closer to the back of the car bounding box
     
     Returns:
         Dictionary with 'front' and 'rear' wheel detections (or None if not found)
@@ -85,31 +87,26 @@ def identify_front_rear_wheels(wheels: List[Dict[str, Any]], car_bbox: Dict[str,
         return {"front": None, "rear": None}
     
     if len(wheels) == 1:
-        # Single wheel - determine if front or rear based on position
+        # Single wheel - determine if front or rear based on position relative to car center
         wheel = wheels[0]
         center_x, _ = calculate_wheel_center(wheel["bbox"])
         car_center_x = (car_bbox["x1"] + car_bbox["x2"]) / 2
         
-        # If wheel is in front half of car, it's likely front wheel
-        if center_x < car_center_x:
-            return {"front": wheel, "rear": None}
+        # Measure distance to each edge of car bbox
+        dist_to_left = center_x - car_bbox["x1"]
+        dist_to_right = car_bbox["x2"] - center_x
+        
+        # The wheel closer to an edge is likely rear (shorter overhang)
+        # The wheel farther from an edge is likely front (longer hood overhang)
+        if dist_to_left < dist_to_right:
+            # Wheel is closer to left edge - likely rear wheel, car facing right
+            return {"front": None, "rear": wheel}
         else:
+            # Wheel is closer to right edge - likely rear wheel, car facing left
             return {"front": None, "rear": wheel}
     
     # Multiple wheels - sort by x position
     sorted_wheels = sorted(wheels, key=lambda w: calculate_wheel_center(w["bbox"])[0])
-    
-    # The leftmost and rightmost wheels are our candidates
-    # We need to determine car orientation to know which is front/rear
-    
-    # Use car bounding box to infer direction
-    # Typically, if we're viewing the left side of the car, 
-    # the left wheel is front and right wheel is rear
-    # For right side view, it's reversed
-    
-    # Heuristic: Use the car's aspect ratio and wheel positions
-    car_width = car_bbox["width"]
-    car_center_x = (car_bbox["x1"] + car_bbox["x2"]) / 2
     
     left_wheel = sorted_wheels[0]
     right_wheel = sorted_wheels[-1]
@@ -117,19 +114,30 @@ def identify_front_rear_wheels(wheels: List[Dict[str, Any]], car_bbox: Dict[str,
     left_center_x, _ = calculate_wheel_center(left_wheel["bbox"])
     right_center_x, _ = calculate_wheel_center(right_wheel["bbox"])
     
-    # Determine which side of the car we're viewing
-    # If left wheel is closer to left edge of car bbox, we're viewing left side
-    left_dist_to_car_left = left_center_x - car_bbox["x1"]
-    right_dist_to_car_right = car_bbox["x2"] - right_center_x
+    # Calculate overhang distances
+    # Left overhang: distance from car's left edge to left wheel
+    # Right overhang: distance from right wheel to car's right edge
+    left_overhang = left_center_x - car_bbox["x1"]
+    right_overhang = car_bbox["x2"] - right_center_x
     
-    # For a typical side view, front wheel is at the "front" of the car
-    # We'll use a simple heuristic: smaller x = front for left-side view
-    # This can be refined with more sophisticated pose estimation
-    
-    return {
-        "front": left_wheel,
-        "rear": right_wheel
-    }
+    # The side with SHORTER overhang is the REAR of the car
+    # (cars have short trunks, long hoods)
+    if left_overhang < right_overhang:
+        # Left overhang is shorter -> left side is rear -> car facing RIGHT
+        # Left wheel = rear, Right wheel = front
+        logger.debug(f"Car facing RIGHT: left_overhang={left_overhang:.0f} < right_overhang={right_overhang:.0f}")
+        return {
+            "front": right_wheel,
+            "rear": left_wheel
+        }
+    else:
+        # Right overhang is shorter -> right side is rear -> car facing LEFT
+        # Left wheel = front, Right wheel = rear
+        logger.debug(f"Car facing LEFT: left_overhang={left_overhang:.0f} >= right_overhang={right_overhang:.0f}")
+        return {
+            "front": left_wheel,
+            "rear": right_wheel
+        }
 
 
 def estimate_car_direction(wheels: List[Dict[str, Any]], car_bbox: Dict[str, int]) -> Tuple[float, float]:
@@ -199,7 +207,8 @@ def calculate_rotation_matrix(
     car_bbox: Dict[str, int],
     image_width: int,
     image_height: int,
-    target_wheel: str = "rear"
+    target_wheel: str = "rear",
+    tire_ellipse: Optional[Dict[str, Any]] = None
 ) -> Dict[str, Any]:
     """
     Calculate the rotation matrix to transform standard basis vectors to wheel local frame.
@@ -215,6 +224,7 @@ def calculate_rotation_matrix(
         image_width: Width of the image in pixels
         image_height: Height of the image in pixels
         target_wheel: Which wheel to calculate for ("front" or "rear")
+        tire_ellipse: Optional detected ellipse parameters for the target wheel
     
     Returns:
         Dictionary containing:
@@ -313,15 +323,57 @@ def calculate_rotation_matrix(
     y_axis = y_axis / np.linalg.norm(y_axis)
     
     # ==========================================================================
-    # X-AXIS (Axle): Perpendicular to both Y and Z
+    # X-AXIS (Axle): Use ellipse data if available, otherwise perpendicular to Y and Z
     # Points along the wheel axle, into the car
     # ==========================================================================
     
-    # X = Y cross Z (right-hand rule)
-    x_axis = np.cross(y_axis, z_axis)
-    x_norm = np.linalg.norm(x_axis)
-    if x_norm > 0:
-        x_axis = x_axis / x_norm
+    ellipse_angle_deg = None
+    ellipse_viewing_angle_deg = None
+    
+    if tire_ellipse:
+        ellipse_angle_deg = tire_ellipse.get("angle", None)
+        ellipse_viewing_angle_deg = tire_ellipse.get("viewing_angle_deg", None)
+        axis_ratio = tire_ellipse.get("axis_ratio", 1.0)
+        
+        logger.info(f"Using ellipse data: angle={ellipse_angle_deg:.1f}°, "
+                    f"ratio={axis_ratio:.2f}, view_angle={ellipse_viewing_angle_deg:.1f}°")
+        
+        # The ellipse major axis is perpendicular to the axle direction
+        # (when viewing the wheel from the side, the major axis is vertical or nearly so)
+        # The ellipse angle tells us how much the major axis deviates from vertical
+        # This deviation = tilt of the axle relative to horizontal
+        
+        # Convert ellipse angle to radians
+        # Ellipse angle is from horizontal, we need to find axle direction
+        # Major axis perpendicular = add 90°
+        axle_angle_rad = math.radians(ellipse_angle_deg + 90)
+        
+        # The axle direction in 2D image space
+        axle_2d_x = math.cos(axle_angle_rad)
+        axle_2d_y = math.sin(axle_angle_rad)
+        
+        # The viewing angle tells us how much the axle points into/out of screen
+        # A nearly circular ellipse (small viewing angle) means we're viewing head-on
+        # A more elliptical shape (larger viewing angle) means we're viewing from the side
+        viewing_rad = math.radians(ellipse_viewing_angle_deg)
+        
+        # Map 2D axle direction + viewing angle to 3D
+        # X-axis points along the axle: some component in screen plane, some into/out of screen
+        x_axis = np.array([
+            axle_2d_x * math.cos(viewing_rad),  # X component (modified by viewing angle)
+            axle_2d_y,                           # Y component (tilt from ellipse angle)
+            math.sin(viewing_rad)                # Z component (depth from viewing angle)
+        ])
+        
+        x_norm = np.linalg.norm(x_axis)
+        if x_norm > 0:
+            x_axis = x_axis / x_norm
+    else:
+        # Fallback: X = Y cross Z (right-hand rule)
+        x_axis = np.cross(y_axis, z_axis)
+        x_norm = np.linalg.norm(x_axis)
+        if x_norm > 0:
+            x_axis = x_axis / x_norm
     
     # Flip X-axis based on which side we're viewing
     # If viewing left side: axle points into screen (negative Z in camera space)
@@ -377,7 +429,10 @@ def calculate_rotation_matrix(
             "ground_angle_deg": math.degrees(ground_angle),
             "wheel_to_wheel_2d": list(wheel_to_wheel_2d),
             "viewing_side": "left" if viewing_left_side else "right",
-            "target_wheel": target_wheel
+            "target_wheel": target_wheel,
+            "ellipse_angle_deg": ellipse_angle_deg,
+            "ellipse_viewing_angle_deg": ellipse_viewing_angle_deg,
+            "used_ellipse": tire_ellipse is not None
         }
     }
 
@@ -387,7 +442,8 @@ def calculate_wheel_transform(
     car_bbox: Dict[str, int],
     image_width: int,
     image_height: int,
-    all_wheels: List[Dict[str, Any]]
+    all_wheels: List[Dict[str, Any]],
+    tire_ellipse: Optional[Dict[str, Any]] = None
 ) -> Dict[str, Any]:
     """
     Calculate complete transform (position + rotation) for a wheel in normalized coordinates.
@@ -401,6 +457,7 @@ def calculate_wheel_transform(
         image_width: Image width in pixels
         image_height: Image height in pixels
         all_wheels: All detected wheels (for context)
+        tire_ellipse: Optional detected ellipse for this wheel
     
     Returns:
         Complete transform information for Three.js
@@ -419,10 +476,11 @@ def calculate_wheel_transform(
     # Normalize radius relative to image size, scale to reasonable depth range
     normalized_z = (wheel_radius / avg_dimension) * 2 - 0.5
     
-    # Calculate rotation
+    # Calculate rotation with ellipse data if available
     rotation_data = calculate_rotation_matrix(
         all_wheels, car_bbox, image_width, image_height, 
-        target_wheel="rear"  # We'll determine actual position separately
+        target_wheel="rear",  # We'll determine actual position separately
+        tire_ellipse=tire_ellipse
     )
     
     return {
@@ -542,7 +600,8 @@ def enrich_detection_with_geometry(
     detection_results: Dict[str, Any],
     image_width: int,
     image_height: int,
-    largest_car_only: bool = True
+    largest_car_only: bool = True,
+    image: Optional[Any] = None
 ) -> Dict[str, Any]:
     """
     Enrich detection results with 3D geometry information for each car.
@@ -555,10 +614,20 @@ def enrich_detection_with_geometry(
         image_width: Image width in pixels
         image_height: Image height in pixels
         largest_car_only: If True and multiple cars detected, only process the largest one
+        image: Optional PIL Image for ellipse detection (improves axis calculation)
     
     Returns:
         Enriched detection results with geometry data
     """
+    # Import ellipse detection if image is provided
+    detect_ellipse = None
+    if image is not None:
+        try:
+            from services.utils.ellipse_detection import detect_tire_ellipse
+            detect_ellipse = detect_tire_ellipse
+        except ImportError:
+            logger.warning("Could not import ellipse_detection module")
+    
     enriched = detection_results.copy()
     enriched["image_dimensions"] = {
         "width": image_width,
@@ -596,21 +665,41 @@ def enrich_detection_with_geometry(
         
         # Calculate transform for rear wheel (primary target for 3D asset)
         rear_wheel = wheel_positions.get("rear")
+        rear_ellipse = None
+        if rear_wheel and detect_ellipse and image:
+            rear_ellipse = detect_ellipse(image, rear_wheel["bbox"])
+            if rear_ellipse:
+                logger.info(f"Rear tire ellipse: angle={rear_ellipse['angle']:.1f}°, "
+                           f"ratio={rear_ellipse['axis_ratio']:.2f}")
+        
         if rear_wheel:
             car_result["rear_wheel_transform"] = calculate_wheel_transform(
-                rear_wheel, car_bbox, image_width, image_height, wheels
+                rear_wheel, car_bbox, image_width, image_height, wheels,
+                tire_ellipse=rear_ellipse
             )
+            car_result["rear_wheel_ellipse"] = rear_ellipse
         else:
             car_result["rear_wheel_transform"] = None
+            car_result["rear_wheel_ellipse"] = None
         
         # Calculate transform for front wheel as well (optional use)
         front_wheel = wheel_positions.get("front")
+        front_ellipse = None
+        if front_wheel and detect_ellipse and image:
+            front_ellipse = detect_ellipse(image, front_wheel["bbox"])
+            if front_ellipse:
+                logger.info(f"Front tire ellipse: angle={front_ellipse['angle']:.1f}°, "
+                           f"ratio={front_ellipse['axis_ratio']:.2f}")
+        
         if front_wheel:
             car_result["front_wheel_transform"] = calculate_wheel_transform(
-                front_wheel, car_bbox, image_width, image_height, wheels
+                front_wheel, car_bbox, image_width, image_height, wheels,
+                tire_ellipse=front_ellipse
             )
+            car_result["front_wheel_ellipse"] = front_ellipse
         else:
             car_result["front_wheel_transform"] = None
+            car_result["front_wheel_ellipse"] = None
         
         # Add overall car geometry info
         # Calculate wheel-to-wheel direction (the key geometric constraint)

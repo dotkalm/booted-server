@@ -6,11 +6,9 @@ This module provides functions to visualize:
 - 3D coordinate axes projected onto 2D image
 - Wheel centers and orientations
 - Ground plane indicators
-- Hough transform line detection
 """
 
 import math
-import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 from typing import Dict, List, Any, Tuple, Optional
 import logging
@@ -27,8 +25,8 @@ COLORS = {
     "x_axis": (255, 0, 0),          # Red (right/axle)
     "y_axis": (0, 255, 0),          # Green (up)
     "z_axis": (0, 0, 255),          # Blue (forward)
-    "hough_lines": (255, 0, 255),   # Magenta - detected Hough lines (car body color match)
     "wheel_to_wheel": (255, 165, 0), # Orange - wheel-to-wheel line
+    "tire_ellipse": (255, 0, 255),  # Magenta - detected tire ellipse
     "center_point": (255, 255, 0),  # Yellow
     "ground_line": (128, 128, 128), # Gray
     "text": (255, 255, 255),        # White
@@ -203,207 +201,6 @@ def draw_wheel_to_wheel_line(
             fill=color,
             outline=color
         )
-
-
-def get_dominant_color(
-    image: Image.Image,
-    bbox: Dict[str, int],
-    sample_ratio: float = 0.1
-) -> Tuple[int, int, int]:
-    """
-    Get the most common color in a bounding box region.
-    Uses histogram binning to find the dominant color.
-    
-    Args:
-        image: PIL Image
-        bbox: Bounding box dict with x1, y1, x2, y2
-        sample_ratio: Ratio of pixels to sample (for performance)
-    
-    Returns:
-        (R, G, B) tuple of the dominant color
-    """
-    # Crop to bbox
-    region = image.crop((bbox["x1"], bbox["y1"], bbox["x2"], bbox["y2"]))
-    
-    # Resize for faster processing
-    max_dim = 100
-    w, h = region.size
-    if max(w, h) > max_dim:
-        scale = max_dim / max(w, h)
-        region = region.resize((int(w * scale), int(h * scale)), Image.Resampling.LANCZOS)
-    
-    # Quantize colors to reduce noise
-    quantized = region.quantize(colors=16, method=Image.Quantize.MEDIANCUT)
-    palette = quantized.getpalette()
-    color_counts = quantized.getcolors()
-    
-    if not color_counts or not palette:
-        return (128, 128, 128)  # Default gray
-    
-    # Find the most common color
-    most_common_idx = max(color_counts, key=lambda x: x[0])[1]
-    r = palette[most_common_idx * 3]
-    g = palette[most_common_idx * 3 + 1]
-    b = palette[most_common_idx * 3 + 2]
-    
-    return (r, g, b)
-
-
-def color_distance(c1: Tuple[int, int, int], c2: Tuple[int, int, int]) -> float:
-    """
-    Calculate Euclidean distance between two colors in RGB space.
-    """
-    return math.sqrt((c1[0] - c2[0])**2 + (c1[1] - c2[1])**2 + (c1[2] - c2[2])**2)
-
-
-def get_line_average_color(
-    image: Image.Image,
-    start: Tuple[int, int],
-    end: Tuple[int, int],
-    num_samples: int = 10
-) -> Tuple[int, int, int]:
-    """
-    Get the average color along a line by sampling points.
-    
-    Args:
-        image: PIL Image
-        start: Start point (x, y)
-        end: End point (x, y)
-        num_samples: Number of points to sample along the line
-    
-    Returns:
-        (R, G, B) tuple of the average color
-    """
-    pixels = []
-    img_rgb = image.convert("RGB")
-    w, h = image.size
-    
-    for i in range(num_samples):
-        t = i / (num_samples - 1) if num_samples > 1 else 0.5
-        x = int(start[0] + t * (end[0] - start[0]))
-        y = int(start[1] + t * (end[1] - start[1]))
-        
-        # Clamp to image bounds
-        x = max(0, min(w - 1, x))
-        y = max(0, min(h - 1, y))
-        
-        pixels.append(img_rgb.getpixel((x, y)))
-    
-    if not pixels:
-        return (128, 128, 128)
-    
-    avg_r = sum(p[0] for p in pixels) // len(pixels)
-    avg_g = sum(p[1] for p in pixels) // len(pixels)
-    avg_b = sum(p[2] for p in pixels) // len(pixels)
-    
-    return (avg_r, avg_g, avg_b)
-
-
-def detect_hough_lines(
-    image: Image.Image,
-    region_bbox: Dict[str, int],
-    color_tolerance: float = 60.0,
-    vertical_threshold_deg: float = 70.0
-) -> List[Tuple[Tuple[int, int], Tuple[int, int], float]]:
-    """
-    Detect lines using Hough transform that match the car body color.
-    Filters out near-vertical lines and lines whose color doesn't match
-    the dominant color of the car bounding box.
-    
-    Args:
-        image: PIL Image
-        region_bbox: Bounding box to search within (car bbox)
-        color_tolerance: Max color distance (Euclidean in RGB space) to accept
-        vertical_threshold_deg: Reject lines steeper than this angle from horizontal
-    
-    Returns:
-        List of (start_point, end_point, angle_deg) tuples for detected lines
-    """
-    try:
-        import cv2
-    except ImportError:
-        logger.warning("OpenCV not installed, skipping Hough transform")
-        return []
-    
-    # Get the dominant color of the car body
-    car_color = get_dominant_color(image, region_bbox)
-    logger.info(f"Car dominant color: RGB{car_color}")
-    
-    # Convert PIL to OpenCV format
-    img_array = np.array(image)
-    if len(img_array.shape) == 3:
-        gray = cv2.cvtColor(img_array, cv2.COLOR_RGB2GRAY)
-    else:
-        gray = img_array
-    
-    # Crop to region of interest (car bounding box with some padding)
-    x1 = max(0, region_bbox["x1"] - 20)
-    y1 = max(0, region_bbox["y1"] - 20)
-    x2 = min(image.width, region_bbox["x2"] + 20)
-    y2 = min(image.height, region_bbox["y2"] + 20)
-    
-    roi = gray[y1:y2, x1:x2]
-    
-    # Edge detection
-    edges = cv2.Canny(roi, 50, 150, apertureSize=3)
-    
-    # Hough Line Transform
-    lines = cv2.HoughLinesP(
-        edges,
-        rho=1,
-        theta=np.pi/180,
-        threshold=50,
-        minLineLength=30,
-        maxLineGap=10
-    )
-    
-    if lines is None:
-        return []
-    
-    matching_lines = []
-    
-    for line in lines:
-        lx1, ly1, lx2, ly2 = line[0]
-        
-        # Calculate line angle from horizontal
-        dx = lx2 - lx1
-        dy = ly2 - ly1
-        line_angle_rad = math.atan2(abs(dy), abs(dx))  # Always positive angle from horizontal
-        line_angle_deg = math.degrees(line_angle_rad)
-        
-        # Skip near-vertical lines (more than vertical_threshold_deg from horizontal)
-        if line_angle_deg > vertical_threshold_deg:
-            continue
-        
-        # Convert to full image coordinates
-        start = (lx1 + x1, ly1 + y1)
-        end = (lx2 + x1, ly2 + y1)
-        
-        # Get the average color along this line
-        line_color = get_line_average_color(image, start, end, num_samples=15)
-        
-        # Check if line color is within tolerance of car color
-        dist = color_distance(line_color, car_color)
-        
-        if dist <= color_tolerance:
-            # Return full angle for display (not just from horizontal)
-            full_angle = math.degrees(math.atan2(dy, dx))
-            matching_lines.append((start, end, full_angle))
-            logger.debug(f"Line accepted: color RGB{line_color}, dist={dist:.1f}, angle={full_angle:.1f}°")
-    
-    logger.info(f"Hough: {len(lines)} total lines, {len(matching_lines)} matching car color")
-    return matching_lines
-
-
-def draw_hough_lines(
-    draw: ImageDraw.ImageDraw,
-    lines: List[Tuple[Tuple[int, int], Tuple[int, int], float]],
-    color: Tuple[int, int, int] = COLORS["hough_lines"],
-    line_width: int = 2
-):
-    """Draw detected Hough lines on the image."""
-    for start, end, angle in lines:
-        draw.line([start, end], fill=color, width=line_width)
 
 
 def draw_wheel_center(
@@ -614,9 +411,7 @@ def visualize_detection(
     draw_ground: bool = True,
     draw_legend_panel: bool = True,
     draw_info: bool = True,
-    draw_hough: bool = True,
-    hough_color_tolerance: float = 60.0,
-    hough_vertical_threshold: float = 70.0,
+    draw_ellipse: bool = True,
     target_wheel: str = "rear",
     axis_length: int = 60
 ) -> Image.Image:
@@ -633,9 +428,7 @@ def visualize_detection(
         draw_ground: Whether to draw ground line
         draw_legend_panel: Whether to draw axis legend
         draw_info: Whether to draw info panel
-        draw_hough: Whether to detect and draw Hough lines matching car color
-        hough_color_tolerance: Max color distance to car body color for Hough lines
-        hough_vertical_threshold: Exclude lines steeper than this angle from horizontal
+        draw_ellipse: Whether to draw detected tire ellipse
         target_wheel: Which wheel to draw axes on ("rear", "front", or "both")
         axis_length: Length of axis arrows in pixels
     
@@ -666,6 +459,21 @@ def visualize_detection(
                     COLORS["wheel_bbox"],
                     label=f"Wheel ({wheel['confidence']:.0%})"
                 )
+        
+        # Draw detected tire ellipses
+        if draw_ellipse:
+            from services.utils.ellipse_detection import detect_tire_ellipse, draw_detected_ellipse
+            for wheel in car_result.get("wheels", []):
+                ellipse = detect_tire_ellipse(image, wheel["bbox"])
+                if ellipse:
+                    draw_detected_ellipse(draw, ellipse, color=COLORS["tire_ellipse"], width=2)
+                    # Log ellipse info
+                    logger.info(
+                        f"Tire ellipse: angle={ellipse['angle']:.1f}°, "
+                        f"ratio={ellipse['axis_ratio']:.2f}, "
+                        f"view_angle={ellipse['viewing_angle_deg']:.1f}°, "
+                        f"method={ellipse['method']}"
+                    )
         
         # Draw ground line
         if draw_ground:
@@ -701,20 +509,6 @@ def visualize_detection(
             length = math.sqrt(dx*dx + dy*dy)
             if length > 0:
                 wheel_to_wheel_2d = (dx / length, dy / length)
-            
-            # Detect and draw Hough lines that match car body color (not near-vertical)
-            if draw_hough:
-                car_bbox = car_result.get("car", {}).get("bbox", {})
-                if car_bbox:
-                    hough_lines = detect_hough_lines(
-                        image,
-                        car_bbox,
-                        color_tolerance=hough_color_tolerance,
-                        vertical_threshold_deg=hough_vertical_threshold
-                    )
-                    if hough_lines:
-                        draw_hough_lines(draw, hough_lines, color=COLORS["hough_lines"], line_width=1)
-                        logger.info(f"Found {len(hough_lines)} Hough lines matching car color")
         
         # Draw rear wheel visualization
         rear_transform = car_result.get("rear_wheel_transform")
