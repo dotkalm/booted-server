@@ -131,37 +131,32 @@ def setup_lighting():
 
 def load_tire_boot(blend_file_path: str) -> bpy.types.Object:
     """
-    Load the tire boot from a .blend file.
+    Load the tire boot by opening the blend file directly.
     
-    Returns an empty object that parents all the loaded objects,
-    preserving their original transforms and hierarchy.
+    This preserves all object relationships, transforms, and groupings
+    exactly as they appear in the original file.
+    
+    Returns an empty object that parents all objects for easy manipulation.
     """
-    # Load all objects from the blend file
-    with bpy.data.libraries.load(blend_file_path, link=False) as (data_from, data_to):
-        data_to.objects = data_from.objects
-        data_to.materials = data_from.materials
-        data_to.textures = data_from.textures
-        data_to.images = data_from.images
+    # Open the blend file directly - this preserves everything
+    bpy.ops.wm.open_mainfile(filepath=blend_file_path)
     
-    # Link loaded objects to current scene
-    tire_boot_objects = []
-    for obj in data_to.objects:
-        if obj is not None:
-            bpy.context.collection.objects.link(obj)
-            tire_boot_objects.append(obj)
+    # Get all mesh objects from the scene
+    mesh_objects = [obj for obj in bpy.data.objects if obj.type == 'MESH']
     
-    if not tire_boot_objects:
-        raise ValueError("No objects found in blend file")
+    if not mesh_objects:
+        raise ValueError("No mesh objects found in blend file")
     
-    # Create an empty object as a parent for all loaded objects
-    # This allows us to move/rotate/scale the entire model as one unit
+    print(f"Loaded {len(mesh_objects)} mesh objects from blend file")
+    
+    # Create an empty at the origin to parent everything
     bpy.ops.object.empty_add(type='PLAIN_AXES', location=(0, 0, 0))
     parent_empty = bpy.context.object
     parent_empty.name = "TireBootParent"
     
-    # Parent all loaded objects to the empty (keeping their transforms)
-    for obj in tire_boot_objects:
-        if obj.parent is None:  # Only parent top-level objects
+    # Parent all top-level objects to the empty
+    for obj in mesh_objects:
+        if obj.parent is None:
             obj.parent = parent_empty
             obj.matrix_parent_inverse = parent_empty.matrix_world.inverted()
     
@@ -205,7 +200,7 @@ def position_tire_boot(
         boot_size = 1.0
     
     # Scale to match wheel size (boot should be roughly wheel diameter)
-    target_size = wheel_radius * 2 * 0.8  # 80% of wheel diameter
+    target_size = wheel_radius * 2 * 0.8 * 1.5  # 80% of wheel diameter, scaled up 1.5x for inspection
     # Scale by 2 since we're rendering at 2x resolution
     target_size = target_size * 2
     scale_factor = target_size / boot_size if boot_size > 0 else 1.0
@@ -226,8 +221,8 @@ def position_tire_boot(
     tire_boot.location = (blender_x, blender_y, blender_z)
     
     # Apply base rotation to orient the claw correctly
-    # Add a Z rotation to angle the claw arm (rotate around vertical axis in camera view)
-    base_rotation = Euler((0, 0, math.radians(45)), 'XYZ')
+    # Try no rotation first to see if both handles are visible
+    base_rotation = Euler((0, 0, 0), 'XYZ')
     tire_boot.rotation_euler = base_rotation
     
     # Apply additional rotation from our geometry calculations if provided
@@ -287,14 +282,16 @@ def main():
     if hide_objects:
         print(f"  Hiding objects: {hide_objects}")
     
-    # Clear and setup scene
-    clear_scene()
+    # Load the blend file first (this replaces the current scene)
+    tire_boot = load_tire_boot(blend_file)
+    
+    # Now set up our render settings, camera and lighting
+    # (must be done AFTER loading because open_mainfile replaces everything)
     setup_render_settings(image_width, image_height, transparent=True)
     setup_camera(wheel_center, wheel_radius, image_width, image_height)
     setup_lighting()
     
-    # Load and position tire boot
-    tire_boot = load_tire_boot(blend_file)
+    # Position the tire boot
     position_tire_boot(tire_boot, wheel_center, wheel_radius, rotation_matrix, image_height)
     
     # Hide specified objects (for testing which objects to remove)
