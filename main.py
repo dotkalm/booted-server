@@ -5,6 +5,7 @@ import json
 import io
 import logging
 from services.models.detector import TireDetector, CarWheelDetector
+from services.utils.geometry import enrich_detection_with_geometry
 
 # Configure logging
 logging.basicConfig(
@@ -114,6 +115,9 @@ async def detect_cars_and_wheels(
             car_conf=car_confidence,
             wheel_conf=wheel_confidence
         )
+
+        # Enrich with 3D geometry for Three.js integration
+        results = enrich_detection_with_geometry(results, image.width, image.height)
 
         with open(json_filename, 'w') as json_file:
             json.dump(results, json_file, indent=4)
