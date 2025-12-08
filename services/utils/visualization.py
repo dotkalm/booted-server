@@ -25,6 +25,7 @@ COLORS = {
     "x_axis": (255, 0, 0),          # Red (right/axle)
     "y_axis": (0, 255, 0),          # Green (up)
     "z_axis": (0, 0, 255),          # Blue (forward)
+    "wheel_to_wheel": (255, 165, 0), # Orange - wheel-to-wheel line
     "center_point": (255, 255, 0),  # Yellow
     "ground_line": (128, 128, 128), # Gray
     "text": (255, 255, 255),        # White
@@ -77,7 +78,8 @@ def draw_3d_axes(
     center: Tuple[float, float],
     basis_vectors: Dict[str, List[float]],
     axis_length: float = 60,
-    line_width: int = 3
+    line_width: int = 3,
+    wheel_to_wheel_2d: Optional[Tuple[float, float]] = None
 ):
     """
     Draw 3D coordinate axes projected onto 2D image.
@@ -88,42 +90,41 @@ def draw_3d_axes(
         basis_vectors: Dictionary with x_axis, y_axis, z_axis vectors
         axis_length: Length of each axis in pixels
         line_width: Width of axis lines
+        wheel_to_wheel_2d: If provided, use this 2D direction for Z-axis (more accurate)
     """
     # Project 3D basis vectors to 2D
-    # Simple projection: use X and Y components, ignore Z for visualization
-    # But we'll use a pseudo-3D projection for better visualization
-    
     x_axis = basis_vectors["x_axis"]
     y_axis = basis_vectors["y_axis"]
     z_axis = basis_vectors["z_axis"]
     
-    # Project to 2D with simple perspective
-    # X component maps to image X
-    # Y component maps to image Y (inverted)
-    # Z component adds slight offset for depth perception
-    
     def project_vector(vec: List[float]) -> Tuple[float, float]:
         """Project 3D vector to 2D screen coordinates."""
-        # Simple orthographic-ish projection with Z influence
-        proj_x = vec[0] + vec[2] * 0.3  # Z adds some X offset
-        proj_y = -vec[1] + vec[2] * 0.2  # Z adds some Y offset, Y is inverted
+        # For X and Y axes: use simple projection with Z influence for depth
+        proj_x = vec[0] + vec[2] * 0.3
+        proj_y = -vec[1] + vec[2] * 0.2  # Y is inverted in image coords
         return (proj_x, proj_y)
     
-    # Calculate end points for each axis
-    x_proj = project_vector(x_axis)
-    y_proj = project_vector(y_axis)
-    z_proj = project_vector(z_axis)
-    
-    # Scale to axis_length
     def scale_vector(v: Tuple[float, float], length: float) -> Tuple[float, float]:
         mag = math.sqrt(v[0]**2 + v[1]**2)
         if mag < 0.001:
             return (0, 0)
         return (v[0] / mag * length, v[1] / mag * length)
     
+    # Calculate end points for X and Y axes (projected from 3D)
+    x_proj = project_vector(x_axis)
+    y_proj = project_vector(y_axis)
+    
     x_end = scale_vector(x_proj, axis_length)
     y_end = scale_vector(y_proj, axis_length)
-    z_end = scale_vector(z_proj, axis_length)
+    
+    # For Z-axis: use the actual 2D wheel-to-wheel direction if provided
+    # This ensures Z lies exactly on the wheel-to-wheel line
+    if wheel_to_wheel_2d:
+        # wheel_to_wheel_2d is in image coordinates (Y not inverted)
+        z_end = scale_vector(wheel_to_wheel_2d, axis_length)
+    else:
+        z_proj = project_vector(z_axis)
+        z_end = scale_vector(z_proj, axis_length)
     
     # Draw axes as arrows
     # X-axis (Red) - Axle direction
@@ -178,6 +179,27 @@ def draw_3d_axes(
         fill=COLORS["z_axis"],
         font=font
     )
+
+
+def draw_wheel_to_wheel_line(
+    draw: ImageDraw.ImageDraw,
+    front_center: Tuple[float, float],
+    rear_center: Tuple[float, float],
+    color: Tuple[int, int, int] = COLORS["wheel_to_wheel"],
+    line_width: int = 3
+):
+    """Draw a line connecting the centers of front and rear wheels."""
+    draw.line([front_center, rear_center], fill=color, width=line_width)
+    
+    # Draw small circles at each wheel center
+    for center in [front_center, rear_center]:
+        radius = 5
+        draw.ellipse(
+            [center[0] - radius, center[1] - radius, 
+             center[0] + radius, center[1] + radius],
+            fill=color,
+            outline=color
+        )
 
 
 def draw_wheel_center(
@@ -443,6 +465,33 @@ def visualize_detection(
                 image.width
             )
         
+        # Get wheel positions for wheel-to-wheel line
+        wheel_positions = car_result.get("wheel_positions", {})
+        front_wheel_data = wheel_positions.get("front")
+        rear_wheel_data = wheel_positions.get("rear")
+        
+        front_center = None
+        rear_center = None
+        wheel_to_wheel_2d = None
+        
+        if front_wheel_data and rear_wheel_data:
+            front_bbox = front_wheel_data["bbox"]
+            rear_bbox = rear_wheel_data["bbox"]
+            front_center = ((front_bbox["x1"] + front_bbox["x2"]) / 2,
+                           (front_bbox["y1"] + front_bbox["y2"]) / 2)
+            rear_center = ((rear_bbox["x1"] + rear_bbox["x2"]) / 2,
+                          (rear_bbox["y1"] + rear_bbox["y2"]) / 2)
+            
+            # Draw the wheel-to-wheel line (orange)
+            draw_wheel_to_wheel_line(draw, front_center, rear_center)
+            
+            # Calculate 2D direction for Z-axis (from rear to front = forward)
+            dx = front_center[0] - rear_center[0]
+            dy = front_center[1] - rear_center[1]
+            length = math.sqrt(dx*dx + dy*dy)
+            if length > 0:
+                wheel_to_wheel_2d = (dx / length, dy / length)
+        
         # Draw rear wheel visualization
         rear_transform = car_result.get("rear_wheel_transform")
         if rear_transform and target_wheel in ("rear", "both"):
@@ -460,7 +509,8 @@ def visualize_detection(
                 draw_3d_axes(
                     draw, center,
                     rear_transform["rotation"]["basis_vectors"],
-                    axis_length=axis_length
+                    axis_length=axis_length,
+                    wheel_to_wheel_2d=wheel_to_wheel_2d
                 )
             
             if draw_info:
@@ -489,7 +539,8 @@ def visualize_detection(
                 draw_3d_axes(
                     draw, center,
                     front_transform["rotation"]["basis_vectors"],
-                    axis_length=axis_length
+                    axis_length=axis_length,
+                    wheel_to_wheel_2d=wheel_to_wheel_2d
                 )
     
     # Draw legend

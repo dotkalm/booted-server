@@ -207,7 +207,7 @@ def calculate_rotation_matrix(
     This computes the columns of a 3x3 rotation matrix:
     - Column 1 (X-axis/Right): Points along the wheel's axle (into the car)
     - Column 2 (Y-axis/Up): Points upward in world space
-    - Column 3 (Z-axis/Forward): Tangent to wheel, along car's direction
+    - Column 3 (Z-axis/Forward): PARALLEL to line connecting wheel centers
     
     Args:
         wheels: List of detected wheels
@@ -227,6 +227,8 @@ def calculate_rotation_matrix(
     # Identify wheels
     wheel_positions = identify_front_rear_wheels(wheels, car_bbox)
     target = wheel_positions.get(target_wheel)
+    front_wheel = wheel_positions.get("front")
+    rear_wheel = wheel_positions.get("rear")
     
     if not target:
         logger.warning(f"No {target_wheel} wheel found, using first available wheel")
@@ -238,49 +240,99 @@ def calculate_rotation_matrix(
     
     # Get geometric measurements
     viewing_angle = estimate_viewing_angle(target["bbox"])
-    car_direction = estimate_car_direction(wheels, car_bbox)
     ground_angle = estimate_ground_plane_angle(wheels)
     
     # Determine which side of the car we're viewing
-    # This affects the direction of the X-axis (into car vs out of car)
     wheel_center_x, _ = calculate_wheel_center(target["bbox"])
     car_center_x = (car_bbox["x1"] + car_bbox["x2"]) / 2
+    viewing_left_side = wheel_center_x > car_center_x * 0.8
     
-    # Heuristic: if wheel is right of car center in image, we're likely viewing left side
-    viewing_left_side = wheel_center_x > car_center_x * 0.8  # Some tolerance
+    # ==========================================================================
+    # Z-AXIS (Forward): Parallel to the line connecting wheel centers
+    # This is the most reliable geometric constraint we have
+    # ==========================================================================
     
-    # Build rotation matrix
-    # 
-    # Y-axis (Up): Always points up, adjusted for ground plane tilt
+    if front_wheel and rear_wheel:
+        front_center = calculate_wheel_center(front_wheel["bbox"])
+        rear_center = calculate_wheel_center(rear_wheel["bbox"])
+        
+        # Vector from rear wheel to front wheel (in image coordinates)
+        # This defines the car's forward direction in 2D
+        wheel_line_dx = front_center[0] - rear_center[0]
+        wheel_line_dy = front_center[1] - rear_center[1]
+        
+        # Normalize the 2D direction
+        wheel_line_length = math.sqrt(wheel_line_dx**2 + wheel_line_dy**2)
+        if wheel_line_length > 0:
+            wheel_line_dx /= wheel_line_length
+            wheel_line_dy /= wheel_line_length
+        
+        # Store the 2D wheel-to-wheel direction for metadata
+        wheel_to_wheel_2d = (wheel_line_dx, wheel_line_dy)
+        
+        # Project to 3D: The Z-axis in 3D space
+        # In image coords: +X is right, +Y is down
+        # In 3D coords: +X is right, +Y is up, +Z is toward camera
+        # 
+        # The wheel-to-wheel line lies mostly in the XZ plane (horizontal)
+        # We map image X to 3D X, and image Y (inverted) contributes to depth
+        z_axis = np.array([
+            wheel_line_dx,           # X component: left-right in image
+            -wheel_line_dy * 0.1,    # Y component: small, from image tilt (inverted)
+            0.0                      # Z component: we'll determine depth from other cues
+        ])
+    else:
+        # Fallback: assume car faces left
+        wheel_to_wheel_2d = (-1.0, 0.0)
+        z_axis = np.array([-1.0, 0.0, 0.0])
+    
+    # Normalize Z-axis
+    z_norm = np.linalg.norm(z_axis)
+    if z_norm > 0:
+        z_axis = z_axis / z_norm
+    
+    # ==========================================================================
+    # Y-AXIS (Up): Perpendicular to ground, adjusted for ground tilt
+    # ==========================================================================
+    
+    # Y-axis should be perpendicular to the ground plane
+    # Ground tilt is measured from horizontal (positive = slopes down to the right)
     y_axis = np.array([
-        -math.sin(ground_angle),
-        math.cos(ground_angle),
-        0.0
+        -math.sin(ground_angle),  # Tilt in X
+        math.cos(ground_angle),   # Mostly up
+        0.0                       # No Z component
     ])
+    y_axis = y_axis / np.linalg.norm(y_axis)
     
-    # Z-axis (Forward): Along car's direction of travel
-    # Project car_direction into 3D, accounting for perspective
-    # For a side view, forward is roughly along the image X-axis
-    z_axis = np.array([
-        car_direction[0],
-        car_direction[1] * 0.1,  # Minimal Y component for side view
-        -0.1  # Slight depth component (car going slightly away)
-    ])
-    z_axis = z_axis / np.linalg.norm(z_axis)
+    # ==========================================================================
+    # X-AXIS (Axle): Perpendicular to both Y and Z
+    # Points along the wheel axle, into the car
+    # ==========================================================================
     
-    # X-axis (Right/Axle): Perpendicular to Y and Z
-    # For left side view: points into screen (negative Z in camera space)
-    # For right side view: points out of screen (positive Z in camera space)
+    # X = Y cross Z (right-hand rule)
     x_axis = np.cross(y_axis, z_axis)
-    x_axis = x_axis / np.linalg.norm(x_axis)
+    x_norm = np.linalg.norm(x_axis)
+    if x_norm > 0:
+        x_axis = x_axis / x_norm
     
     # Flip X-axis based on which side we're viewing
+    # If viewing left side: axle points into screen (negative Z in camera space)
+    # If viewing right side: axle points out of screen (positive Z in camera space)
     if viewing_left_side:
         x_axis = -x_axis
     
     # Re-orthogonalize Z to ensure perfect orthonormality
+    # But preserve the original direction (parallel to wheel-to-wheel line)
+    z_axis_original_direction = z_axis.copy()
     z_axis = np.cross(x_axis, y_axis)
     z_axis = z_axis / np.linalg.norm(z_axis)
+    
+    # Ensure Z points in the same general direction as wheel-to-wheel line
+    # (dot product should be positive)
+    if np.dot(z_axis, z_axis_original_direction) < 0:
+        z_axis = -z_axis
+        # Also flip X to maintain right-hand coordinate system
+        x_axis = -x_axis
     
     # Construct rotation matrix (columns are the basis vectors)
     rotation_matrix = np.column_stack([x_axis, y_axis, z_axis])
@@ -294,9 +346,9 @@ def calculate_rotation_matrix(
     return {
         "rotation_matrix": rotation_matrix.tolist(),
         "basis_vectors": {
-            "x_axis": x_axis.tolist(),  # Right / Axle direction
+            "x_axis": x_axis.tolist(),  # Axle direction
             "y_axis": y_axis.tolist(),  # Up
-            "z_axis": z_axis.tolist()   # Forward
+            "z_axis": z_axis.tolist()   # Forward (parallel to wheel-to-wheel line)
         },
         "euler_angles": {
             "x": euler_angles[0],
@@ -315,7 +367,7 @@ def calculate_rotation_matrix(
             "viewing_angle_deg": math.degrees(viewing_angle),
             "ground_angle_rad": ground_angle,
             "ground_angle_deg": math.degrees(ground_angle),
-            "car_direction_2d": list(car_direction),
+            "wheel_to_wheel_2d": list(wheel_to_wheel_2d),
             "viewing_side": "left" if viewing_left_side else "right",
             "target_wheel": target_wheel
         }
@@ -470,7 +522,7 @@ def _create_identity_result() -> Dict[str, Any]:
             "viewing_angle_deg": 0,
             "ground_angle_rad": 0,
             "ground_angle_deg": 0,
-            "car_direction_2d": [-1, 0],
+            "wheel_to_wheel_2d": [-1, 0],
             "viewing_side": "unknown",
             "target_wheel": "unknown",
             "warning": "No wheel detected, returning identity transform"
@@ -533,8 +585,19 @@ def enrich_detection_with_geometry(
             car_result["front_wheel_transform"] = None
         
         # Add overall car geometry info
+        # Calculate wheel-to-wheel direction (the key geometric constraint)
+        wheel_to_wheel_2d = (-1.0, 0.0)  # default
+        if wheel_positions.get("front") and wheel_positions.get("rear"):
+            front_center = calculate_wheel_center(wheel_positions["front"]["bbox"])
+            rear_center = calculate_wheel_center(wheel_positions["rear"]["bbox"])
+            dx = front_center[0] - rear_center[0]
+            dy = front_center[1] - rear_center[1]
+            length = math.sqrt(dx*dx + dy*dy)
+            if length > 0:
+                wheel_to_wheel_2d = (dx / length, dy / length)
+        
         car_result["car_geometry"] = {
-            "direction_2d": list(estimate_car_direction(wheels, car_bbox)),
+            "wheel_to_wheel_2d": list(wheel_to_wheel_2d),
             "ground_angle_deg": math.degrees(estimate_ground_plane_angle(wheels)),
             "viewing_side": "left" if wheel_positions.get("rear") and 
                 calculate_wheel_center(wheel_positions["rear"]["bbox"])[0] > 
