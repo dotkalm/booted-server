@@ -39,13 +39,31 @@ def setup_render_settings(width: int, height: int, transparent: bool = True):
     if transparent:
         scene.render.film_transparent = True
     
-    # Use Cycles for quality, or Eevee for speed
-    scene.render.engine = 'BLENDER_EEVEE'  # Faster for this use case
+    # Use Eevee for speed (Blender 5.0 uses BLENDER_EEVEE_NEXT)
+    # Fall back to BLENDER_EEVEE for older versions
+    if hasattr(bpy.types, 'SceneEEVEE') and 'BLENDER_EEVEE_NEXT' in dir(bpy.types.RenderSettings.bl_rna.properties['engine'].enum_items.keys):
+        scene.render.engine = 'BLENDER_EEVEE_NEXT'
+    else:
+        try:
+            scene.render.engine = 'BLENDER_EEVEE_NEXT'
+        except:
+            scene.render.engine = 'BLENDER_EEVEE'
     
-    # Eevee settings for decent quality
-    scene.eevee.taa_render_samples = 64
-    scene.eevee.use_ssr = True
-    scene.eevee.use_soft_shadows = True
+    # Eevee settings - use try/except for API compatibility across versions
+    try:
+        scene.eevee.taa_render_samples = 64
+    except AttributeError:
+        pass
+    
+    try:
+        scene.eevee.use_ssr = True
+    except AttributeError:
+        pass  # Renamed or removed in Blender 5.0
+    
+    try:
+        scene.eevee.use_soft_shadows = True
+    except AttributeError:
+        pass
 
 
 def setup_camera(wheel_center: tuple, wheel_radius: float, image_width: int, image_height: int):
@@ -182,7 +200,13 @@ def position_tire_boot(
     # Position at wheel center
     tire_boot.location = (blender_x, blender_y, 0)
     
-    # Apply rotation from our geometry calculations
+    # Apply base rotation to orient the claw correctly
+    # The model needs to be rotated to face the camera properly
+    # Rotate 90 degrees clockwise around Z axis (negative rotation)
+    base_rotation = Euler((0, 0, math.radians(-90)), 'XYZ')
+    tire_boot.rotation_euler = base_rotation
+    
+    # Apply additional rotation from our geometry calculations if provided
     if rotation_matrix:
         # Convert our 3x3 rotation matrix to Blender's Matrix
         rot_mat = Matrix([
@@ -190,7 +214,9 @@ def position_tire_boot(
             [rotation_matrix[1][0], rotation_matrix[1][1], rotation_matrix[1][2]],
             [rotation_matrix[2][0], rotation_matrix[2][1], rotation_matrix[2][2]]
         ])
-        tire_boot.rotation_euler = rot_mat.to_euler()
+        # Combine base rotation with geometry rotation
+        combined = rot_mat @ base_rotation.to_matrix()
+        tire_boot.rotation_euler = combined.to_euler()
 
 
 def render_to_file(output_path: str):

@@ -23,9 +23,9 @@ BLENDER_PATH = os.environ.get('BLENDER_PATH', 'blender')
 SCRIPT_DIR = Path(__file__).parent / 'blender_scripts'
 RENDER_SCRIPT = SCRIPT_DIR / 'render_tire_boot.py'
 
-# Default tire boot asset
+# Default tire boot asset (claw only, no wheel)
 ASSETS_DIR = Path(__file__).parent.parent.parent / 'assets' / 'tire-boot'
-DEFAULT_BLEND_FILE = ASSETS_DIR / 'Security_Tire_Claw_Boot_blender_base.blend'
+DEFAULT_BLEND_FILE = ASSETS_DIR / 'Security_Tire_Claw_Boot_claw_only.blend'
 
 
 class BlenderRenderError(Exception):
@@ -117,7 +117,7 @@ def render_tire_boot(
             config_path
         ]
         
-        logger.info(f"Running Blender: {' '.join(cmd)}")
+        print(f"Running Blender: {' '.join(cmd)}")
         
         result = subprocess.run(
             cmd,
@@ -126,12 +126,14 @@ def render_tire_boot(
             timeout=120  # 2 minute timeout
         )
         
-        if result.returncode != 0:
-            logger.error(f"Blender stderr: {result.stderr}")
-            logger.error(f"Blender stdout: {result.stdout}")
-            raise BlenderRenderError(f"Blender rendering failed: {result.stderr}")
+        # Always print output for debugging
+        if result.stdout:
+            print(f"Blender stdout:\n{result.stdout}")
+        if result.stderr:
+            print(f"Blender stderr:\n{result.stderr}")
         
-        logger.info(f"Blender output: {result.stdout}")
+        if result.returncode != 0:
+            raise BlenderRenderError(f"Blender rendering failed (exit code {result.returncode})")
         
         if not output_path.exists():
             raise BlenderRenderError("Blender did not create output file")
@@ -175,6 +177,10 @@ def composite_tire_boot(
     
     # Save if output path specified
     if output_path:
+        # Convert to RGB if saving as JPEG (no alpha support)
+        output_str = str(output_path).lower()
+        if output_str.endswith(('.jpg', '.jpeg')):
+            composite = composite.convert('RGB')
         composite.save(output_path)
         logger.info(f"Saved composite to: {output_path}")
     
