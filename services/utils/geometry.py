@@ -292,16 +292,24 @@ def calculate_rotation_matrix(
         z_axis = z_axis / z_norm
     
     # ==========================================================================
-    # Y-AXIS (Up): Perpendicular to ground, adjusted for ground tilt
+    # Y-AXIS (Up): Always exactly 90° from Z-axis
+    # Perpendicular to Z in the XY plane (image plane)
     # ==========================================================================
     
-    # Y-axis should be perpendicular to the ground plane
-    # Ground tilt is measured from horizontal (positive = slopes down to the right)
+    # Y-axis is perpendicular to Z, rotated 90° counter-clockwise in 2D
+    # If Z = (zx, zy, 0), then Y = (-zy, zx, 0) gives 90° rotation
+    # But we want Y to point "up" (negative Y in image coords = positive Y in 3D)
+    # So we use: Y perpendicular to Z, pointing generally upward
     y_axis = np.array([
-        -math.sin(ground_angle),  # Tilt in X
-        math.cos(ground_angle),   # Mostly up
-        0.0                       # No Z component
+        -z_axis[1],   # Perpendicular to Z (rotated 90°)
+        z_axis[0],    # Perpendicular to Z (rotated 90°)  
+        0.0
     ])
+    
+    # Ensure Y points upward (positive Y component in 3D = up)
+    if y_axis[1] < 0:
+        y_axis = -y_axis
+    
     y_axis = y_axis / np.linalg.norm(y_axis)
     
     # ==========================================================================
@@ -533,7 +541,8 @@ def _create_identity_result() -> Dict[str, Any]:
 def enrich_detection_with_geometry(
     detection_results: Dict[str, Any],
     image_width: int,
-    image_height: int
+    image_height: int,
+    largest_car_only: bool = True
 ) -> Dict[str, Any]:
     """
     Enrich detection results with 3D geometry information for each car.
@@ -545,6 +554,7 @@ def enrich_detection_with_geometry(
         detection_results: Results from CarWheelDetector.detect_cars_and_wheels()
         image_width: Image width in pixels
         image_height: Image height in pixels
+        largest_car_only: If True and multiple cars detected, only process the largest one
     
     Returns:
         Enriched detection results with geometry data
@@ -555,7 +565,25 @@ def enrich_detection_with_geometry(
         "height": image_height
     }
     
-    for car_result in enriched.get("results", []):
+    results_to_process = enriched.get("results", [])
+    
+    # If multiple cars detected and largest_car_only is True, filter to largest
+    if largest_car_only and len(results_to_process) > 1:
+        # Find the car with the largest bounding box area
+        def bbox_area(car_result):
+            bbox = car_result["car"]["bbox"]
+            return bbox["width"] * bbox["height"]
+        
+        largest_car = max(results_to_process, key=bbox_area)
+        results_to_process = [largest_car]
+        
+        # Update the enriched results to only include the largest car
+        enriched["results"] = results_to_process
+        enriched["total_cars"] = 1
+        enriched["filtered_to_largest"] = True
+        logger.info(f"Multiple cars detected, filtering to largest (area: {bbox_area(largest_car)} px²)")
+    
+    for car_result in results_to_process:
         car_bbox = car_result["car"]["bbox"]
         wheels = car_result.get("wheels", [])
         
