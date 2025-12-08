@@ -1,0 +1,22 @@
+# 
+# Wavefront material file
+# Converted by the DEEP Exploration  Deep Exploration 6.5 x64 6.5.0.9182
+# Right Hemisphere, LTD
+# http://www.righthemisphere.com/
+# 
+
+newmtl wheel_lock_2
+Ka 0.807843 0.807843 0.807843
+Kd 1 1 1
+Ks 1 1 1
+illum 2
+Ns 172.275
+map_Kd wheel_lock_2_diffuse.png
+map_bump wheel_lock_2_normal.png
+bump wheel_lock_2_normal.png
+map_opacity 
+map_d 
+refl 
+map_kS wheel_lock_2_specular.png
+map_kA 
+map_Ns Swheel_lock_2_glossiness.png
