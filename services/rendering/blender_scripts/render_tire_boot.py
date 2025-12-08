@@ -73,10 +73,17 @@ def setup_camera(wheel_center: tuple, wheel_radius: float, image_width: int, ima
     
     For compositing, we use an orthographic camera positioned to look at the model
     from the front (along the -Y axis), matching how the model appears in the preview.
+    
+    Note: We render at 2x resolution for quality, so camera position and ortho_scale
+    are calculated for the 2x coordinate system.
     """
+    # Scale factor for 2x render resolution
+    scale = 2
+    
     # Create camera - position it in front of the scene, looking toward +Y
     # Camera is placed at negative Y, looking toward positive Y
-    bpy.ops.object.camera_add(location=(image_width / 2, -100, image_height / 2))
+    # Position is centered on the scaled image
+    bpy.ops.object.camera_add(location=(image_width * scale / 2, -100, image_height * scale / 2))
     camera = bpy.context.object
     camera.name = "CompositeCamera"
     
@@ -86,9 +93,8 @@ def setup_camera(wheel_center: tuple, wheel_radius: float, image_width: int, ima
     # Use orthographic projection for 2D compositing
     camera.data.type = 'ORTHO'
     
-    # Scale orthographic view to match image dimensions
-    # We'll work in a coordinate system where 1 unit = 1 pixel
-    camera.data.ortho_scale = max(image_width, image_height)
+    # Scale orthographic view to match the 2x render dimensions
+    camera.data.ortho_scale = max(image_width, image_height) * scale
     
     # Rotate camera to look along +Y axis (toward the scene)
     # 90 degrees around X axis makes camera look from -Y toward +Y
@@ -127,11 +133,9 @@ def load_tire_boot(blend_file_path: str) -> bpy.types.Object:
     """
     Load the tire boot from a .blend file.
     
-    Returns the main tire boot object.
+    Returns an empty object that parents all the loaded objects,
+    preserving their original transforms and hierarchy.
     """
-    # Get list of objects before appending
-    existing_objects = set(bpy.data.objects.keys())
-    
     # Load all objects from the blend file
     with bpy.data.libraries.load(blend_file_path, link=False) as (data_from, data_to):
         data_to.objects = data_from.objects
@@ -146,21 +150,22 @@ def load_tire_boot(blend_file_path: str) -> bpy.types.Object:
             bpy.context.collection.objects.link(obj)
             tire_boot_objects.append(obj)
     
-    # Find the main mesh object (usually the largest one)
-    mesh_objects = [obj for obj in tire_boot_objects if obj.type == 'MESH']
+    if not tire_boot_objects:
+        raise ValueError("No objects found in blend file")
     
-    if not mesh_objects:
-        raise ValueError("No mesh objects found in blend file")
+    # Create an empty object as a parent for all loaded objects
+    # This allows us to move/rotate/scale the entire model as one unit
+    bpy.ops.object.empty_add(type='PLAIN_AXES', location=(0, 0, 0))
+    parent_empty = bpy.context.object
+    parent_empty.name = "TireBootParent"
     
-    # Return the largest mesh by vertex count
-    main_object = max(mesh_objects, key=lambda o: len(o.data.vertices))
-    
-    # Parent all objects to the main one for easier manipulation
+    # Parent all loaded objects to the empty (keeping their transforms)
     for obj in tire_boot_objects:
-        if obj != main_object and obj.parent is None:
-            obj.parent = main_object
+        if obj.parent is None:  # Only parent top-level objects
+            obj.parent = parent_empty
+            obj.matrix_parent_inverse = parent_empty.matrix_world.inverted()
     
-    return main_object
+    return parent_empty
 
 
 def position_tire_boot(
@@ -174,22 +179,35 @@ def position_tire_boot(
     Position and orient the tire boot to match the detected wheel.
     
     Args:
-        tire_boot: The tire boot Blender object
+        tire_boot: The tire boot parent object (empty)
         wheel_center: (x, y) pixel coordinates of wheel center
         wheel_radius: Radius of wheel in pixels
         rotation_matrix: 3x3 rotation matrix from our geometry calculations
         image_height: Image height for Y-coordinate flip
     """
-    # Get the tire boot's bounding box to determine its size
-    bbox = [tire_boot.matrix_world @ Vector(corner) for corner in tire_boot.bound_box]
-    boot_size = max(
-        max(v.x for v in bbox) - min(v.x for v in bbox),
-        max(v.y for v in bbox) - min(v.y for v in bbox),
-        max(v.z for v in bbox) - min(v.z for v in bbox)
-    )
+    # Calculate bounding box across all child mesh objects
+    all_coords = []
+    for child in tire_boot.children_recursive:
+        if child.type == 'MESH':
+            for corner in child.bound_box:
+                world_coord = child.matrix_world @ Vector(corner)
+                all_coords.append(world_coord)
+    
+    if all_coords:
+        min_x = min(v.x for v in all_coords)
+        max_x = max(v.x for v in all_coords)
+        min_y = min(v.y for v in all_coords)
+        max_y = max(v.y for v in all_coords)
+        min_z = min(v.z for v in all_coords)
+        max_z = max(v.z for v in all_coords)
+        boot_size = max(max_x - min_x, max_y - min_y, max_z - min_z)
+    else:
+        boot_size = 1.0
     
     # Scale to match wheel size (boot should be roughly wheel diameter)
     target_size = wheel_radius * 2 * 0.8  # 80% of wheel diameter
+    # Scale by 2 since we're rendering at 2x resolution
+    target_size = target_size * 2
     scale_factor = target_size / boot_size if boot_size > 0 else 1.0
     tire_boot.scale = (scale_factor, scale_factor, scale_factor)
     
@@ -198,16 +216,18 @@ def position_tire_boot(
     # - Image X -> Blender X (horizontal)
     # - Image Y -> Blender Z (vertical, but inverted: image Y=0 is top, Blender Z=high is top)
     # - Blender Y is depth (0 for our flat compositing)
-    blender_x = wheel_center[0]
-    blender_z = image_height - wheel_center[1]  # Flip Y to Z
+    # Scale by 2 since we're rendering at 2x resolution
+    scale = 2
+    blender_x = wheel_center[0] * scale
+    blender_z = (image_height - wheel_center[1]) * scale  # Flip Y to Z
     blender_y = 0  # Depth = 0
     
     # Position at wheel center
     tire_boot.location = (blender_x, blender_y, blender_z)
     
     # Apply base rotation to orient the claw correctly
-    # No rotation needed - model is already oriented correctly at 0 degrees
-    base_rotation = Euler((0, 0, 0), 'XYZ')
+    # Add a Z rotation to angle the claw arm (rotate around vertical axis in camera view)
+    base_rotation = Euler((0, 0, math.radians(45)), 'XYZ')
     tire_boot.rotation_euler = base_rotation
     
     # Apply additional rotation from our geometry calculations if provided

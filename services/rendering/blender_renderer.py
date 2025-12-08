@@ -23,9 +23,9 @@ BLENDER_PATH = os.environ.get('BLENDER_PATH', 'blender')
 SCRIPT_DIR = Path(__file__).parent / 'blender_scripts'
 RENDER_SCRIPT = SCRIPT_DIR / 'render_tire_boot.py'
 
-# Default tire boot asset (claw only, no wheel)
+# Default tire boot asset (full model with tire for now)
 ASSETS_DIR = Path(__file__).parent.parent.parent / 'assets' / 'tire-boot'
-DEFAULT_BLEND_FILE = ASSETS_DIR / 'Security_Tire_Claw_Boot_claw_only.blend'
+DEFAULT_BLEND_FILE = ASSETS_DIR / 'Security_Tire_Claw_Boot_blender_base.blend'
 
 
 class BlenderRenderError(Exception):
