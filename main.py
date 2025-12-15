@@ -93,6 +93,10 @@ async def detect_cars_and_wheels(
     car_confidence: float = 0.3,
     wheel_confidence: float = 0.3
 ):
+    """
+        Main endpoint for two-stage car and wheel detection. 
+        Detects cars first, then wheels within detected car regions followed by enrichment with 3D geometry for Three.js integration.
+    """
     if car_wheel_detector is None:
         raise HTTPException(status_code=503, detail="Models still loading, please try again")
 
