@@ -528,8 +528,7 @@ def enrich_detection_with_geometry(
     detection_results: Dict[str, Any],
     image_width: int,
     image_height: int,
-    largest_car_only: bool = True,
-    image: Optional[Any] = None
+    image,
 ) -> Dict[str, Any]:
     """
     Enrich detection results with 3D geometry information for each car.
@@ -547,12 +546,14 @@ def enrich_detection_with_geometry(
     Returns:
         Enriched detection results with geometry data
     """
+    largest_car_only = True
     # Import ellipse detection if image is provided
     detect_ellipse = None
     if image is not None:
         try:
             from services.utils.ellipse_detection import detect_tire_ellipse
             detect_ellipse = detect_tire_ellipse
+            print(detect_ellipse, 'detect_ellipse loaded')
         except ImportError:
             logger.warning("Could not import ellipse_detection module")
     
