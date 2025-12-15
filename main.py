@@ -101,6 +101,7 @@ async def detect_cars_and_wheels(
         image = Image.open(io.BytesIO(contents))
 
         # export detection results to JSON and save image for fixures
+        """
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         image_output_path = f"image_fixture_{timestamp}.jpg"
         image.save(image_output_path, format="JPEG")
@@ -108,6 +109,7 @@ async def detect_cars_and_wheels(
 
         json_filename = f"detection_fixture_{timestamp}.json"
         print(f"JSON data successfully written to {json_filename}")
+        """
 
         # Run two-stage detection
         results = car_wheel_detector.detect_cars_and_wheels(
@@ -117,11 +119,12 @@ async def detect_cars_and_wheels(
         )
 
         # Enrich with 3D geometry for Three.js integration
-        results = enrich_detection_with_geometry(results, image.width, image.height)
-
+        results = enrich_detection_with_geometry(results, image.width, image.height, image)
+        """
         with open(json_filename, 'w') as json_file:
             json.dump(results, json_file, indent=4)
-
+        """
+        print('Final detection results:', results["results"][0])
         return {
             "filename": file.filename,
             "width": image.width,
