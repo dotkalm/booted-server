@@ -14,8 +14,8 @@ wheels/
 *.pt
 *.pth
 *.onnx
-models/
-runs/
+/models/
+/runs/
 
 # Exception: Allow specific production model files
 !yolov8n.pt
