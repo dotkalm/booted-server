@@ -10,7 +10,8 @@
       "Bash(.venv/bin/python -m pytest tests/test_detector.py -v -s)",
       "Bash(timeout:*)",
       "Bash(.venv/bin/python:*)",
-      "Bash(chmod:*)"
+      "Bash(chmod:*)",
+      "Bash(rm:*)"
     ],
     "deny": [],
     "ask": []
