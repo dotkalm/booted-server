@@ -18,8 +18,11 @@ For a wheel viewed from the side:
 
 import math
 import numpy as np
-from typing import Dict, List, Any, Optional, Tuple
+from typing import Dict, List, Any, Optional, Tuple, TYPE_CHECKING
 import logging
+
+if TYPE_CHECKING:
+    from services.utils.ellipse_detection import EllipseDetectionResult
 
 logger = logging.getLogger(__name__)
 
@@ -162,12 +165,12 @@ def estimate_ground_plane_angle(wheels: List[Dict[str, Any]]) -> float:
 
 
 def calculate_rotation_matrix(
-    wheels: List[Dict[str, Any]], 
+    wheels: List[Dict[str, Any]],
     car_bbox: Dict[str, int],
     image_width: int,
     image_height: int,
     target_wheel: str = "rear",
-    tire_ellipse: Optional[Dict[str, Any]] = None
+    tire_ellipse: Optional["EllipseDetectionResult"] = None
 ) -> Dict[str, Any]:
     """
     Calculate the rotation matrix to transform standard basis vectors to wheel local frame.
@@ -371,7 +374,7 @@ def calculate_wheel_transform(
     image_width: int,
     image_height: int,
     all_wheels: List[Dict[str, Any]],
-    tire_ellipse: Optional[Dict[str, Any]] = None
+    tire_ellipse: Optional["EllipseDetectionResult"] = None
 ) -> Dict[str, Any]:
     """
     Calculate complete transform (position + rotation) for a wheel in normalized coordinates.

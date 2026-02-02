@@ -16,10 +16,24 @@ We validate detected ellipses by checking for dark pixels along the ellipse peri
 import math
 import numpy as np
 from PIL import Image
-from typing import Dict, List, Any, Tuple, Optional
+from typing import Dict, List, Any, Tuple, Optional, TypedDict, Literal
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+class EllipseDetectionResult(TypedDict):
+    """Structured result from tire ellipse detection."""
+    center: Tuple[float, float]  # (cx, cy) in image coordinates
+    axes: Tuple[float, float]  # (major_axis, minor_axis) semi-axes lengths
+    angle: float  # Rotation angle in degrees (0° = horizontal major axis)
+    axis_ratio: float  # Minor/major ratio (1.0 = circle, <1.0 = ellipse)
+    viewing_angle_deg: float  # Estimated angle from head-on view
+    confidence: float  # 0.0-1.0 confidence in the detection
+    method: Literal["contour_fit_dark_validated", "bbox_fallback"]
+    dark_ring_ratio: float  # Ratio of dark pixels on perimeter
+    avg_brightness: float  # Average brightness along perimeter
+    has_dark_ring: bool  # Whether tire has validated dark ring
 
 # Threshold for "dark" pixels (tire rubber is typically very dark)
 DARK_THRESHOLD = 80  # Pixels with brightness below this are considered dark
@@ -125,7 +139,7 @@ def detect_tire_ellipse(
     image: Image.Image,
     wheel_bbox: Dict[str, int],
     padding: int = 10
-) -> Optional[Dict[str, Any]]:
+) -> Optional[EllipseDetectionResult]:
     """
     Detect the ellipse of a tire within its bounding box using OpenCV.
     
@@ -336,28 +350,28 @@ def _fallback_ellipse_from_bbox(
     wheel_bbox: Dict[str, int],
     roi_x1: int = 0,
     roi_y1: int = 0
-) -> Dict[str, Any]:
+) -> EllipseDetectionResult:
     """
     Create ellipse parameters from bounding box when detection fails.
     Assumes the bbox roughly matches the tire.
     """
     center_x = (wheel_bbox["x1"] + wheel_bbox["x2"]) / 2
     center_y = (wheel_bbox["y1"] + wheel_bbox["y2"]) / 2
-    
+
     width = wheel_bbox["x2"] - wheel_bbox["x1"]
     height = wheel_bbox["y2"] - wheel_bbox["y1"]
-    
+
     major_axis = max(width, height) / 2
     minor_axis = min(width, height) / 2
-    
+
     # Angle: if wider than tall, major axis is horizontal (0°)
     # if taller than wide, major axis is vertical (90°)
     angle = 0 if width >= height else 90
-    
+
     axis_ratio = minor_axis / major_axis if major_axis > 0 else 1.0
     viewing_angle_rad = math.acos(min(axis_ratio, 1.0))
     viewing_angle_deg = math.degrees(viewing_angle_rad)
-    
+
     return {
         "center": (center_x, center_y),
         "axes": (major_axis, minor_axis),
@@ -365,12 +379,15 @@ def _fallback_ellipse_from_bbox(
         "axis_ratio": axis_ratio,
         "viewing_angle_deg": viewing_angle_deg,
         "confidence": 0.3,  # Low confidence for bbox fallback
-        "method": "bbox_fallback"
+        "method": "bbox_fallback",
+        "dark_ring_ratio": 0.0,  # No validation performed
+        "avg_brightness": 128.0,  # Unknown, use mid-gray
+        "has_dark_ring": False  # No validation performed
     }
 
 
 def calculate_axle_angle_from_ellipse(
-    ellipse: Dict[str, Any],
+    ellipse: EllipseDetectionResult,
     wheel_to_wheel_angle_deg: float
 ) -> float:
     """
@@ -414,7 +431,7 @@ def calculate_axle_angle_from_ellipse(
 
 def draw_detected_ellipse(
     draw,  # ImageDraw object
-    ellipse: Dict[str, Any],
+    ellipse: Optional[EllipseDetectionResult],
     color: Tuple[int, int, int] = (255, 0, 255),  # Magenta
     width: int = 2
 ):
