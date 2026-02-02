@@ -58,4 +58,5 @@ jobs:
             --cpu ${{ env.CPU }} \
             --max-instances ${{ env.MAX_INSTANCES }} \
             --timeout ${{ env.TIMEOUT }} \
-            --no-cpu-throttling
+            --no-cpu-throttling \
+            --set-env-vars="ALLOWED_ORIGINS=${{ vars.ALLOWED_ORIGINS }}"
