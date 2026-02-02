@@ -1,10 +1,8 @@
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from PIL import Image
-from datetime import datetime
-import json
 import io
 import logging
-from services.models.detector import CarWheelDetector
+from services.models.detector import TireDetector, CarWheelDetector
 from services.utils.geometry import enrich_detection_with_geometry
 
 # Configure logging
@@ -21,15 +19,19 @@ logger.info("=" * 50)
 app = FastAPI()
 
 # Global detector instance
+detector = None
 car_wheel_detector = None
 models_loaded = False
 
 @app.on_event("startup")
 async def load_models():
     """Load models after server starts listening"""
-    global car_wheel_detector, models_loaded
+    global detector, car_wheel_detector, models_loaded
     try:
         logger.info("Server started successfully, beginning model load...")
+        logger.info("Loading TireDetector model...")
+        detector = TireDetector()
+        logger.info("TireDetector loaded successfully")
         logger.info("Loading CarWheelDetector models...")
         car_wheel_detector = CarWheelDetector()
         logger.info("CarWheelDetector loaded successfully")
@@ -52,6 +54,7 @@ def health_check():
     """Detailed health check endpoint"""
     return {
         "status": "healthy" if models_loaded else "starting",
+        "tire_detector": detector is not None,
         "car_wheel_detector": car_wheel_detector is not None,
         "models_ready": models_loaded
     }
