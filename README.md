@@ -66,3 +66,16 @@ run in uv
 </tr>
 </table>
 
+## Run the docker container locally
+
+  ```
+  docker build -t edge-detector-api .
+
+  docker images | grep edge-detector-api
+
+  docker run -d -p 8080:8080 --name edge-detector edge-detector-api
+
+  docker ps
+
+  docker logs -f edge-detector
+  ```

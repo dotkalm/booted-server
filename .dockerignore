@@ -12,6 +12,9 @@ venv/
 .pytest_cache/
 tests/
 
+# Training (not needed at runtime)
+services/train/
+
 # Git
 .git/
 .gitignore
@@ -45,3 +48,9 @@ wandb/
 
 # Claude
 .claude/
+
+# Jujutsu
+.jj/
+
+# Temp files
+*__temp__*

@@ -1,32 +1,14 @@
 # Use Python 3.11 slim image
 FROM python:3.11-slim
 
-# Install system dependencies for OpenCV and Blender
+# Install system dependencies for OpenCV
 RUN apt-get update && apt-get install -y \
     libgl1 \
     libglib2.0-0 \
-    # Blender dependencies
-    wget \
-    xz-utils \
-    libxrender1 \
-    libxi6 \
-    libxkbcommon0 \
-    libxxf86vm1 \
-    libxfixes3 \
-    libxext6 \
-    libx11-6 \
     libsm6 \
+    libxext6 \
+    libxrender1 \
     && rm -rf /var/lib/apt/lists/*
-
-# Install Blender 4.2 LTS (stable, supports files from 2.8+)
-# Note: Using 4.2 LTS for Docker stability; local dev uses system Blender
-RUN wget -q https://download.blender.org/release/Blender4.2/blender-4.2.3-linux-x64.tar.xz \
-    && tar -xf blender-4.2.3-linux-x64.tar.xz \
-    && mv blender-4.2.3-linux-x64 /opt/blender \
-    && rm blender-4.2.3-linux-x64.tar.xz
-
-# Set Blender path environment variable
-ENV BLENDER_PATH=/opt/blender/blender
 
 # Set working directory
 WORKDIR /app
