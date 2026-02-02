@@ -1,3 +1,4 @@
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from PIL import Image
 import io
@@ -16,17 +17,18 @@ logger.info("=" * 50)
 logger.info("Starting Booted API application")
 logger.info("=" * 50)
 
-app = FastAPI()
-
 # Global detector instance
 detector = None
 car_wheel_detector = None
 models_loaded = False
 
-@app.on_event("startup")
-async def load_models():
-    """Load models after server starts listening"""
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    """Lifespan event handler for startup and shutdown"""
     global detector, car_wheel_detector, models_loaded
+
+    # Startup
     try:
         logger.info("Server started successfully, beginning model load...")
         logger.info("Loading TireDetector model...")
@@ -41,6 +43,14 @@ async def load_models():
     except Exception as e:
         logger.error(f"FATAL: Failed to load models: {e}", exc_info=True)
         models_loaded = False
+
+    yield
+
+    # Shutdown (cleanup if needed)
+    logger.info("Shutting down application...")
+
+
+app = FastAPI(lifespan=lifespan)
 
 @app.get("/")
 def read_root():
